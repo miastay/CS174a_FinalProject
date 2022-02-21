@@ -41,11 +41,17 @@ export class Project extends Scene {
         this.initial_camera_location = Mat4.look_at(vec3(0, 0, 10), vec3(0, 0, 0), vec3(0, 1, 0));
         this.camera_delta = vec3(0, 0, 0);
 
+        this.physics_objects = [
+            new PhysicsObject('apple', this.shapes.apple, Mat4.identity(), this.materials.apple)
+        ]
+
     }
     make_control_panel() {
         // Draw the scene's buttons, setup their actions and keyboard shortcuts, and monitor live measurements.
-        this.key_triggered_button("example button 1", ["Control", "0"], function() {
-            console.log("pressed a button")
+        this.key_triggered_button("make objs jump", ["Control", "0"], function() {
+            for(var obj of this.physics_objects) {
+                obj.add_impulse(vec3(0, 10, 0));
+            }
         });
         this.new_line();
     }
@@ -70,7 +76,8 @@ export class Project extends Scene {
 
         this.draw_environment(context, program_state);
         this.draw_light_gadgets(context, program_state);
-        
+        this.draw_physics_objects(context, program_state);
+
     }
 
     draw_environment(context, program_state) {
@@ -84,13 +91,60 @@ export class Project extends Scene {
             this.shapes.box.draw(context, program_state, Mat4.scale(1, 8, 10).times(Mat4.translation(-10, 0, 0)), this.materials.test)
 
             //apple
-            this.shapes.apple.draw(context, program_state, Mat4.scale(1, 1, 1), this.materials.apple)
+            
     }
 
     draw_light_gadgets(context, program_state) {
         for(var light of program_state.lights) {
             this.shapes.sphere_4.draw(context, program_state, Mat4.translation(light.position[0], light.position[1], light.position[2], light.position[3]), this.materials.light_gadget)
         }
+    }
+
+    draw_physics_objects(context, program_state) {
+        for(var object of this.physics_objects) {
+            object.step(program_state);
+            object.draw(context, program_state);
+        }
+    }
+
+
+}
+
+class PhysicsObject {
+    constructor(name, shape, model_transform, material) {
+        this.name = name;
+        this.shape = shape;
+        this.model_transform = model_transform;
+        this.material = material;
+        this.position = vec3(0, 2, 0);
+        this.velocity = vec3(0, 1, 0);
+        this.acceleration = vec3(0, -9.8, 0);
+        this.drag = 1.0;
+    }
+    step(program_state) {
+        const t = program_state.animation_time;
+        const dt = program_state.animation_delta_time;
+
+        const dtm = dt * 0.001;
+
+        
+        
+
+        if(this.position[1] < -0.3) {
+            this.velocity[1] = -0.7*this.velocity[1] + 0.3;
+        }
+        this.velocity = this.velocity.plus(this.acceleration.times(dtm));
+        this.velocity = this.velocity.times(this.drag);
+        this.position = this.position.plus(this.velocity.times(dtm));
+        
+        this.model_transform = Mat4.translation(this.position[0], this.position[1], this.position[2]);
+
+    }
+    draw(context, program_state) {
+        this.shape.draw(context, program_state, this.model_transform, this.material)
+    }
+    add_impulse(vec) {
+        this.velocity = this.velocity.plus(vec);
     }
 }
 
