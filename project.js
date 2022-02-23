@@ -19,7 +19,7 @@ export class Project extends Scene {
             sphere_4: new defs.Subdivision_Sphere(4),
             circle: new defs.Regular_2D_Polygon(1, 15),
             box: new defs.Cube(), 
-            apple: new Shape_From_File('./assets/apple.obj')
+            apple: new defs.Subdivision_Sphere(2),
         };
 
         this.base_ambient = 0.5;
@@ -35,7 +35,7 @@ export class Project extends Scene {
             light_gadget: new Material(new defs.Phong_Shader(), {ambient: 1, diffusivity: 1, color: color(1, 1, 1, 1)}),
             floor: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.8, specularity: 0.2, smoothness: 0, color: color(0.6, 0.1, 0.1, 1)}),
             tex: new Material(bump, {ambient: .5, texture: new Texture("assets/wood_floor.png")}),
-            apple: new Material(new defs.Textured_Phong(1), { color: color(1, .5, .5, 1), ambient: .3, diffusivity: .5, specularity: .5, texture: new Texture("assets/apple_color.jpg")})
+            apple: new Material(new Gouraud_Shader(), {ambient: .4, diffusivity: .6, color: hex_color("#ff0000"), smoothness: .00001}),
         }
 
         this.initial_camera_location = Mat4.look_at(vec3(0, 0, 10), vec3(0, 0, 0), vec3(0, 1, 0));
@@ -83,6 +83,8 @@ export class Project extends Scene {
 
         let baby_transform = model_transform.times(Mat4.translation(-10, 0, 0)).times(Mat4.scale(.5, .5, .5));
         this.draw_model(context, program_state, baby_transform);
+        
+        this.draw_apple(context, program_state);
 
 
     }
@@ -135,7 +137,27 @@ export class Project extends Scene {
         this.shapes.box.draw(context, program_state, larm_transform, this.materials.test.override({color: skin}))
         this.shapes.box.draw(context, program_state, rarm_transform, this.materials.test.override({color: skin}))
     }
+    
+    draw_apple(context, program_state) {
+        let model_transform = Mat4.identity();
+        const apple_color = color(1, 0, 0, 1);
+        const stem_color = hex_color("#693423");
+        const leaf_color = hex_color("#2cb733");
 
+        let apple_transform = model_transform.times(Mat4.rotation(Math.PI, 0, 0, 1));
+        this.shapes.apple.draw(context, program_state, apple_transform, this.materials.apple.override({color: apple_color}));
+
+        let stem_transform = model_transform.times(Mat4.translation(0, 1, 0))
+            .times(Mat4.scale(.1, .35, .1));
+        this.shapes.box.draw(context, program_state, stem_transform, this.materials.test.override({color: stem_color}));
+
+        let leaf_transform = model_transform.times(Mat4.translation(0.5, 1.2, 0))
+            .times(Mat4.scale(.3, .1, .1))
+            .times(Mat4.rotation(Math.PI/6, 0, 0, 1));
+
+        this.shapes.box.draw(context, program_state, leaf_transform, this.materials.test.override({color: leaf_color}));
+
+    }
 
 }
 
