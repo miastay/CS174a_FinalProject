@@ -73,10 +73,17 @@ export class Project extends Scene {
         program_state.lights = [new Light(light_position, hex_color('#ffffff'), 10**2)];
 
         let model_transform = Mat4.identity();
+        model_transform = model_transform.times(Mat4.translation(5, 0, 0));
 
         this.draw_environment(context, program_state);
         this.draw_light_gadgets(context, program_state);
         this.draw_physics_objects(context, program_state);
+
+        this.draw_model(context, program_state, model_transform)
+
+        let baby_transform = model_transform.times(Mat4.translation(-10, 0, 0)).times(Mat4.scale(.5, .5, .5));
+        this.draw_model(context, program_state, baby_transform);
+
 
     }
 
@@ -105,6 +112,28 @@ export class Project extends Scene {
             object.step(program_state);
             object.draw(context, program_state);
         }
+    }
+
+    draw_model(context, program_state, model_transform) {
+
+        const shirt = hex_color("#0eaeae");
+        const pants = hex_color("494697");
+        const skin = hex_color("a97d64");
+
+        //Head
+        this.shapes.box.draw(context, program_state, model_transform.times(Mat4.translation(0, 5.5, 0)), this.materials.test.override({color: skin}));
+        
+        let body_transform = model_transform.times(Mat4.scale(1, 1.5, 0.5)).times(Mat4.translation(0, 2, 0))
+        this.shapes.box.draw(context, program_state, body_transform, this.materials.test.override({color: shirt}));
+        //Legs
+        this.shapes.box.draw(context, program_state, model_transform.times(Mat4.scale(.5, 1.5, .5)).times(Mat4.translation(-1, 0, 0)), this.materials.test.override({color: pants}));
+        this.shapes.box.draw(context, program_state, model_transform.times(Mat4.scale(.5, 1.5, .5)).times(Mat4.translation(1, 0, 0)), this.materials.test.override({color: pants}));
+
+        //Arms
+        let larm_transform = body_transform.times(Mat4.scale(.5, 1, 1)).times(Mat4.translation(-3, 0, 0));
+        let rarm_transform = body_transform.times(Mat4.scale(.5, 1, 1)).times(Mat4.translation(3, 0, 0));
+        this.shapes.box.draw(context, program_state, larm_transform, this.materials.test.override({color: skin}))
+        this.shapes.box.draw(context, program_state, rarm_transform, this.materials.test.override({color: skin}))
     }
 
 
@@ -147,6 +176,11 @@ class PhysicsObject {
         this.velocity = this.velocity.plus(vec);
     }
 }
+
+
+
+
+
 
 
 
