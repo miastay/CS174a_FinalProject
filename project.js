@@ -44,6 +44,9 @@ export class Project extends Scene {
         this.physics_objects = [
             new PhysicsObject('apple', this.shapes.apple, Mat4.identity(), this.materials.apple)
         ]
+        this.kinematic_objects = [
+            new KinematicObject('a', this.shapes.box, Mat4.scale(10, 0.5, 10).times(Mat4.translation(0, -4, 0)), this.materials.tex)
+        ]
 
     }
     make_control_panel() {
@@ -77,12 +80,13 @@ export class Project extends Scene {
         this.draw_environment(context, program_state);
         this.draw_light_gadgets(context, program_state);
         this.draw_physics_objects(context, program_state);
+        this.draw_kinematic_objects(context, program_state);
 
     }
 
     draw_environment(context, program_state) {
         /* floor */
-            this.shapes.box.draw(context, program_state, Mat4.scale(10, 0.5, 10).times(Mat4.translation(0, -4, 0)), this.materials.tex)
+            //this.shapes.box.draw(context, program_state, Mat4.scale(10, 0.5, 10).times(Mat4.translation(0, -4, 0)), this.materials.tex)
         /* z- wall */
             this.shapes.box.draw(context, program_state, Mat4.scale(10, 8, 1).times(Mat4.translation(0, 0, -10)), this.materials.test)
         /* x+ wall */
@@ -100,13 +104,20 @@ export class Project extends Scene {
         }
     }
 
+    
+
     draw_physics_objects(context, program_state) {
         for(var object of this.physics_objects) {
+            object.step(program_state, this.kinematic_objects);
+            object.draw(context, program_state);
+        }
+    }
+    draw_kinematic_objects(context, program_state) {
+        for(var object of this.kinematic_objects) {
             object.step(program_state);
             object.draw(context, program_state);
         }
     }
-
 
 }
 
@@ -121,23 +132,25 @@ class PhysicsObject {
         this.acceleration = vec3(0, -9.8, 0);
         this.drag = 1.0;
     }
-    step(program_state) {
+    step(program_state, kobjs) {
         const t = program_state.animation_time;
         const dt = program_state.animation_delta_time;
 
         const dtm = dt * 0.001;
 
-        
-        
+        console.log(this.velocity)
 
-        if(this.position[1] < -0.3) {
-            this.velocity[1] = -0.7*this.velocity[1] + 0.3;
+        for(var k of kobjs) {
+            if(this.position[1] < k.position[1]) {
+                this.velocity[1] = -(k.damp[1])*this.velocity[1];
+                this.position[1] = k.position[1];
+            }
         }
         this.velocity = this.velocity.plus(this.acceleration.times(dtm));
         this.velocity = this.velocity.times(this.drag);
         this.position = this.position.plus(this.velocity.times(dtm));
         
-        this.model_transform = Mat4.translation(this.position[0], this.position[1], this.position[2]);
+        this.model_transform = Mat4.translation(this.position[0], this.position[1], this.position[2]).times(Mat4.rotation(dtm, 1, 0, 0));
 
     }
     draw(context, program_state) {
@@ -145,6 +158,27 @@ class PhysicsObject {
     }
     add_impulse(vec) {
         this.velocity = this.velocity.plus(vec);
+    }
+}
+class KinematicObject {
+    constructor(name, shape, model_transform, material) {
+        this.name = name;
+        this.shape = shape;
+        this.model_transform = model_transform;
+        this.material = material;
+        this.position = vec3(0, 0, 0);
+        this.damp = vec3(0, 0.7, 0);
+        this.friction = 1.0;
+    }
+    step(program_state) {
+        const t = program_state.animation_time;
+        const dt = program_state.animation_delta_time;
+
+        const dtm = dt * 0.001;
+
+    }
+    draw(context, program_state) {
+        this.shape.draw(context, program_state, this.model_transform, this.material)
     }
 }
 
