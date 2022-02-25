@@ -273,7 +273,7 @@ class ChildModel extends KinematicObject {
         this.scene.shapes.box.draw(context, program_state, this.model_transform.times(Mat4.scale(1, 1, 0.01)).times(Mat4.translation(0, 5.5, 100)), this.scene.materials.face);
 
         let body_transform = this.model_transform.times(Mat4.scale(1, 1.5, 0.5)).times(Mat4.translation(0, 2, 0))
-        this.scene.shapes.box.draw(context, program_state, body_transform, this.scene.materials.shirt);
+        this.scene.shapes.box.draw(context, program_state, body_transform, this.scene.materials.shirt.override({color: color(0.5, 1, 0.5, 1)}));
         //Legs
         this.scene.shapes.box.draw(context, program_state, this.model_transform.times(Mat4.scale(.5, 1.5, .5)).times(Mat4.translation(-1, 0, 0)), this.scene.materials.pants);
         this.scene.shapes.box.draw(context, program_state, this.model_transform.times(Mat4.scale(.5, 1.5, .5)).times(Mat4.translation(1, 0, 0)), this.scene.materials.pants);
