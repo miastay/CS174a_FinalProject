@@ -210,11 +210,12 @@ class Apple extends PhysicsObject {
         this.rotation = vec4(1, 0, 0, 1);
         this.angular_velocity = vec4(Math.random()*0.1, Math.random()*0.1, Math.random()*0.1, 0);
         this.scale = vec3(0.4, 0.4, 0.4);
+        this.color = color(Math.random()*0.5 + 0.5, 0, 0, 1);
     }
 
     draw(context, program_state) {
         let apple_transform = this.model_transform.times(Mat4.rotation(Math.PI, 0, 0, 1));
-        this.scene.shapes.apple.draw(context, program_state, apple_transform, this.scene.materials.apple);
+        this.scene.shapes.apple.draw(context, program_state, apple_transform, this.scene.materials.apple.override({color: this.color}));
 
         let stem_transform = this.model_transform.times(Mat4.translation(0, 1, 0))
             .times(Mat4.scale(.1, .35, .1));
