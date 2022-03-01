@@ -61,6 +61,18 @@ export class Project extends Scene {
             new ChildModel(vec3(0, 0, 0), this)
         ]
 
+        this.States = {
+            'animation' : 0,
+            'game' : 1,
+            'none': null
+        }
+
+        this.state = this.States.game;
+        this.ticking = true;
+        this.speed = 1.0;
+        this.fov_default = Math.PI / 4;
+        this.fov_mult = 1.0;
+
     }
     make_control_panel() {
         // Draw the scene's buttons, setup their actions and keyboard shortcuts, and monitor live measurements.
@@ -75,6 +87,20 @@ export class Project extends Scene {
             this.physics_objects.push(new Apple(vec3(this.mro(4),Math.random()*4,this.mro(4)), vec3(this.mro(1),(Math.random()*1) + 4,this.mro(1)), this))
         });
         this.new_line();
+        this.key_triggered_button("pause/play", ["p"], function() {
+            this.ticking = !this.ticking;
+        });
+        this.new_line();
+        this.key_triggered_button("half speed", ["h"], function() {
+            this.speed = this.speed / 2.0;
+        });
+        this.key_triggered_button("double speed", ["d"], function() {
+            this.speed = this.speed * 2.0;
+        });
+        this.key_triggered_button("tighten", ["t"], function() {
+            this.fov_mult -= 0.05;
+        });
+        this.new_line();
     }
 
     mro(scale) {
@@ -83,32 +109,65 @@ export class Project extends Scene {
 
     display(context, program_state) {
 
-        if (!context.scratchpad.controls) {
-            this.children.push(context.scratchpad.controls = new defs.Movement_Controls());
-            program_state.set_camera(this.initial_camera_location);
-        }
-
+        //run the below regardless of state:
         program_state.set_camera(this.initial_camera_location);
+        program_state.projection_transform = Mat4.perspective(this.fov_default * this.fov_mult, context.width / context.height, .1, 1000);
+        const light_position = vec4(0, 8, 0, 1);
+        program_state.lights = [new Light(light_position, hex_color('#ffffff'), 10**3)];
 
-        program_state.projection_transform = Mat4.perspective(Math.PI / 4, context.width / context.height, .1, 1000);
+        switch(this.state) {
 
-        const t = program_state.animation_time / 1000, dt = program_state.animation_delta_time / 1000;
+            case this.States.animation : {
 
-        const light_position = vec4(0, 2*Math.sin(t) + 4, 0, 1);
-        program_state.lights = [new Light(light_position, hex_color('#ffffff'), 10**2)];
+                /**
+                 *      Animation display logic goes here
+                 */
 
-        let model_transform = Mat4.identity();
-        model_transform = model_transform.times(Mat4.translation(5, 0, 0));
+            }   break;
+
+            case this.States.game : {
+
+                /**
+                 *      Game display logic goes here
+                 */
+
+                this.ticking && this.tickGame(program_state);
+                this.drawGame(context, program_state);
+
+            }   break;
+
+
+            default : {
+                tickDefault(context, program_state);
+            }
+        }
 
         this.draw_environment(context, program_state);
         this.draw_light_gadgets(context, program_state);
+
+    }
+
+    /**
+     *      Game draw function
+     */
+    drawGame(context, program_state) {
+
         this.draw_physics_objects(context, program_state);
 
-        //this.draw_model(context, program_state, model_transform)
+    }
+    /**
+     *      Game tick function
+     */
+    tickGame(program_state) {
 
-        //let baby_transform = model_transform.times(Mat4.translation(-10, 0, 0)).times(Mat4.scale(.5, .5, .5));
-        //this.draw_model(context, program_state, baby_transform);
-        
+        this.tick_physics_objects(program_state);
+
+    }
+
+    /**
+     *      Default display tick to run; acts as a backup to the above
+     */
+    tickDefault(context, program_state) {
 
     }
 
@@ -137,8 +196,12 @@ export class Project extends Scene {
             object.draw(context, program_state);
         }
         for(var object of this.physics_objects) {
-            object.step(program_state, [this.kinematic_objects[0]]);
             object.draw(context, program_state);
+        }
+    }
+    tick_physics_objects(program_state) {
+        for(var object of this.physics_objects) {
+            object.step(program_state, [this.kinematic_objects[0]]);
         }
     }
 }
@@ -160,12 +223,12 @@ class PhysicsObject {
         const t = program_state.animation_time;
         const dt = program_state.animation_delta_time;
 
-        const dtm = dt * 0.001;
+        const dtm = dt * 0.001 * this.scene.speed;
 
         this.velocity = this.velocity.plus(this.acceleration.times(dtm));
         this.position = this.position.plus(this.velocity.times(dtm));
 
-        this.rotation = this.rotation.plus(this.angular_velocity);
+        this.rotation = this.rotation.plus(this.angular_velocity.times(dtm));
         this.model_transform = Mat4.translation(this.position[0], this.position[1], this.position[2])
                                     .times(Mat4.rotation(this.rotation[0], this.rotation[1], this.rotation[2], this.rotation[3]))
                                     .times(Mat4.scale(this.scale[0], this.scale[1], this.scale[2]));
@@ -208,7 +271,7 @@ class Apple extends PhysicsObject {
     constructor(position, initial_velocity, scene) {
         super(position, initial_velocity, scene);
         this.rotation = vec4(1, 0, 0, 1);
-        this.angular_velocity = vec4(Math.random()*0.1, Math.random()*0.1, Math.random()*0.1, 0);
+        this.angular_velocity = vec4(Math.random()*10, Math.random()*10, Math.random()*10, 0);
         this.scale = vec3(0.4, 0.4, 0.4);
         this.color = color(Math.random()*0.5 + 0.5, 0, 0, 1);
     }
