@@ -50,7 +50,9 @@ export class Project extends Scene {
 
             face: new Material(new defs.Fake_Bump_Map(1), {ambient: .5, texture: new Texture("assets/face.png")}),
 
-            crosshair: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/crosshair.png")})
+            crosshair: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/crosshair.png")}),
+
+            arrow_dark: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: color(0.26, 0.15, 0.15, 1)})
 
         }
 
@@ -118,8 +120,6 @@ export class Project extends Scene {
         this.new_line();
         this.key_triggered_button("pause/play", ["p"], function() {
             this.ticking = !this.ticking;
-            document.querySelector("#hit").currentTime = 0;
-            document.querySelector("#hit").play();
         });
         this.new_line();
         this.key_triggered_button("half speed", ["h"], function() {
@@ -159,6 +159,12 @@ export class Project extends Scene {
 
     game_spawnArrow(fov, program_state, context) {
         this.physics_objects.push(new Arrow(this.initial_eye, this.initial_arrow_vel.times(fov**4), this, program_state, context))
+    }
+
+    game_appleHit(apple) {
+        document.querySelector("#hit").currentTime = 0;
+        document.querySelector("#hit").play();
+        apple.kill();
     }
 
     display(context, program_state) {
@@ -268,7 +274,7 @@ export class Project extends Scene {
         /* floor */
             //this.shapes.box.draw(context, program_state, Mat4.scale(10, 0.5, 10).times(Mat4.translation(0, -4, 0)), this.materials.tex)
         /* z- wall */
-            this.shapes.box.draw(context, program_state, Mat4.scale(10, 8, 1).times(Mat4.translation(0, 0, -10)), this.materials.phong)
+            //this.shapes.box.draw(context, program_state, Mat4.scale(10, 8, 1).times(Mat4.translation(0, 0, -10)), this.materials.phong)
         /* x+ wall */
             this.shapes.box.draw(context, program_state, Mat4.scale(1, 8, 10).times(Mat4.translation(10, 0, 0)), this.materials.phong)
         /* x- wall */
@@ -314,6 +320,7 @@ class PhysicsObject {
         this.rotation = vec4(0, 0, 0, 1);
         this.angular_velocity = vec4(0, 0, 0, 0);
         this.angular_drag = 0.95;
+        this.radius = 1.0;
     }
     step(program_state, kobjs) {
         const t = program_state.animation_time;
@@ -330,7 +337,7 @@ class PhysicsObject {
                                     .times(Mat4.scale(this.scale[0], this.scale[1], this.scale[2]));
         
         for(var k of kobjs) {
-            if(this.is_colliding(k)) {
+            if(this.is_colliding_k(k)) {
                 this.velocity[1] = Math.abs(this.velocity[1])*1;
                 this.velocity[0] *= k.friction; this.velocity[2] *= k.friction;
                 this.angular_velocity = this.angular_velocity.times(this.angular_drag);
@@ -341,10 +348,16 @@ class PhysicsObject {
             }
         }
     }
-    is_colliding(k) {
+    is_colliding_k(k) {
         let xc = this.position[0] > k.bounds[0] && this.position[0] < k.bounds[3];
         let yc = this.position[1]*(this.scale[1]*1.1) > k.bounds[1] && this.position[1]*(this.scale[1]*1.1) < k.bounds[4];
         let zc = this.position[2] > k.bounds[2] && this.position[2] < k.bounds[5];
+        return (xc && yc && zc)
+    }
+    is_colliding_d(d) {
+        let xc = Math.abs(this.position[0] - d.position[0]) <= this.radius + d.radius;
+        let yc = Math.abs(this.position[1] - d.position[1]) <= this.radius + d.radius;
+        let zc = Math.abs(this.position[2] - d.position[2]) <= this.radius + d.radius;
         return (xc && yc && zc)
     }
     draw(context, program_state) {};
@@ -359,6 +372,7 @@ class KinematicObject extends PhysicsObject {
         this.damp = damp;
         this.friction = friction;
         this.bounds = null;
+        this.normal = vec3(0, 1, 0);
     }
 }
 
@@ -370,22 +384,38 @@ class Apple extends PhysicsObject {
         this.angular_velocity = vec4(Math.random()*10, Math.random()*10, Math.random()*10, 0);
         this.scale = vec3(0.4, 0.4, 0.4);
         this.color = color(Math.random()*0.5 + 0.5, 0, 0, 1);
+        this.radius = 0.5;
+        this.alpha = 1.0;
+        this.alpha_to = 1.0;
     }
 
     draw(context, program_state) {
+        this.color = color(this.color[0], 0, 0, this.alpha);
         let apple_transform = this.model_transform.times(Mat4.rotation(Math.PI, 0, 0, 1));
         this.scene.shapes.apple.draw(context, program_state, apple_transform, this.scene.materials.apple.override({color: this.color}));
 
         let stem_transform = this.model_transform.times(Mat4.translation(0, 1, 0))
             .times(Mat4.scale(.1, .35, .1));
-        this.scene.shapes.box.draw(context, program_state, stem_transform, this.scene.materials.stem);
+        let stem_color = hex_color("#693423");
+        stem_color[3] = this.alpha;
+        this.scene.shapes.box.draw(context, program_state, stem_transform, this.scene.materials.stem.override({color: stem_color}));
 
         let leaf_transform = this.model_transform.times(Mat4.translation(0.5, 1.2, 0))
             .times(Mat4.scale(.3, .1, .1))
             .times(Mat4.rotation(Math.PI/6, 0, 0, 1));
 
-        this.scene.shapes.box.draw(context, program_state, leaf_transform, this.scene.materials.leaf);
+        let leaf_color = hex_color("#2cb733");
+        leaf_color[3] = this.alpha;
+        this.scene.shapes.box.draw(context, program_state, leaf_transform, this.scene.materials.leaf.override({color: leaf_color}));
+        this.alpha = this.scene.lerp(this.alpha, this.alpha_to, 0.1);
+        if(this.alpha < 0.1) {
+            delete this;
+        }
+    }
 
+    kill() {
+        this.wasHit = true;
+        this.alpha_to = 0.0;
     }
 }
 
@@ -401,12 +431,26 @@ class Arrow extends PhysicsObject {
         console.log(y_t)
         this.velocity = vec3(initial_velocity[2] * (theta), initial_velocity[2] * y_t, initial_velocity[2]);
         this.scale = vec3(0.1, 0.1, 0.4);
+        this.radius = 0.2;
+        this.angular_drag = 0.0;
+        this.angular_velocity = vec4(0, 0, 10, 1)
     }
 
     draw(context, program_state) {
 
-        this.scene.shapes.box.draw(context, program_state, this.model_transform, this.scene.materials.leaf);
+        this.scene.shapes.box.draw(context, program_state, this.model_transform, this.scene.materials.arrow_dark);
 
+    }
+    step(program_state, kobjs) {
+        super.step(program_state, kobjs);
+        for(var apple of this.scene.physics_objects.filter(x => x.constructor.name === "Apple")) {
+            if(this.is_colliding_d(apple) && !apple.wasHit) {
+                console.log("collision with ", apple)
+                apple.add_impulse(this.velocity.times(0.2))
+                apple.angular_velocity = vec4(Math.random()*10 + 10, Math.random()*10 + 10, Math.random()*10 + 10, 0);
+                this.scene.game_appleHit(apple);
+            }
+        }
     }
 }
 
