@@ -25,6 +25,7 @@ export class Project extends Scene {
             circle: new defs.Regular_2D_Polygon(1, 15),
             box: new defs.Cube(), 
             apple: new defs.Subdivision_Sphere(2),
+            crosshair: new defs.Regular_2D_Polygon(1, 4)
         };
 
         this.base_ambient = 0.5;
@@ -47,8 +48,10 @@ export class Project extends Scene {
             shirt: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: hex_color("494697")}),
             pants: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: hex_color("#0eaeae")}),
 
-            face: new Material(new defs.Fake_Bump_Map(1), {ambient: .5, texture: new Texture("assets/face.png")})
-            
+            face: new Material(new defs.Fake_Bump_Map(1), {ambient: .5, texture: new Texture("assets/face.png")}),
+
+            crosshair: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/crosshair.png")})
+
         }
 
         this.initial_eye = vec3(0, 2, 6);
@@ -92,6 +95,10 @@ export class Project extends Scene {
         this.last_mouse = null;
         this.mouse_sens = 0.5;
         this.play_scope_in = true;
+
+        this.initial_arrow_vel = vec3(0, 0, -25);
+
+        this.crosshair = new Crosshair(this);
 
         this.camera_to = this.initial_camera_location;
 
@@ -150,6 +157,10 @@ export class Project extends Scene {
         }
     }
 
+    game_spawnArrow(fov, program_state, context) {
+        this.physics_objects.push(new Arrow(this.initial_eye, this.initial_arrow_vel.times(fov**4), this, program_state, context))
+    }
+
     display(context, program_state) {
 
         //run the below regardless of state:
@@ -179,7 +190,7 @@ export class Project extends Scene {
                  *      Game display logic goes here
                  */
 
-                this.ticking && this.tickGame(program_state);
+                this.ticking && this.tickGame(context, program_state);
                 this.drawGame(context, program_state);
 
             }   break;
@@ -201,19 +212,20 @@ export class Project extends Scene {
     drawGame(context, program_state) {
 
         this.draw_physics_objects(context, program_state);
+        this.crosshair.draw(context, program_state, this.canvas)
 
     }
     /**
      *      Game tick function
      */
-    tickGame(program_state) {
+    tickGame(context, program_state) {
 
         if(this.tick % this.cooldown == 0) {
             let xv = Math.random()*3 + 2.5;
             if(Math.random() < 0.5) {
                 xv *= -1;
             }
-            this.physics_objects.push(new Apple(vec3(-5*(xv / Math.abs(xv)), 5, -5), vec3(xv,(Math.random()*1) + 4, 0), this))
+            this.physics_objects.push(new Apple(vec3(-5*(xv / Math.abs(xv)), 5, -5), vec3(xv,((Math.random()*1) + 1) + 4, 0), this))
         }
 
         this.tick_physics_objects(program_state);
@@ -224,19 +236,20 @@ export class Project extends Scene {
             this.play_scope_in = false;
         }
         if(mouseup != null) { 
+            this.game_spawnArrow(this.fov_drawn / (this.fov_default * this.fov_mult), program_state, context);
             this.game_toggleScope(false);
             mouseup = null;
             this.play_scope_in = true;
         }
+        if(clicked != null) {
+            clicked = null;
+        }
         if(this.last_mouse && mouse) {
-            //console.log(program_state.camera_inverse, Mat4.look_at(vec3(0, 0, 10), vec3(0, 0, 0), vec3(0, 1, 0)));
             let mid_to_mouse = vec(((mouse.clientX + window.scrollX) - (this.canvas.offsetLeft + (this.canvas.offsetWidth / 2))), 
             ((mouse.clientY + window.scrollY) - (this.canvas.offsetTop + (this.canvas.offsetHeight / 2))));
             mid_to_mouse = mid_to_mouse.times(this.mouse_sens);
             let factor = 0.05;
             this.camera_to = Mat4.look_at(this.initial_eye, vec3(mid_to_mouse[0] * factor, mid_to_mouse[1] * -1 * factor, 0), vec3(0, 1, 0));
-            //this.camera_to[0] = vec4(0, 0, 10, 0);
-            
         }
         this.last_mouse = mouse;
 
@@ -307,7 +320,7 @@ class PhysicsObject {
         const dt = program_state.animation_delta_time;
 
         const dtm = dt * 0.001 * this.scene.speed;
-
+        
         this.velocity = this.velocity.plus(this.acceleration.times(dtm));
         this.position = this.position.plus(this.velocity.times(dtm));
 
@@ -372,6 +385,27 @@ class Apple extends PhysicsObject {
             .times(Mat4.rotation(Math.PI/6, 0, 0, 1));
 
         this.scene.shapes.box.draw(context, program_state, leaf_transform, this.scene.materials.leaf);
+
+    }
+}
+
+class Arrow extends PhysicsObject {
+
+    constructor(position, initial_velocity, scene, program_state, context) {
+        super(position, initial_velocity, scene);
+        let ar = context.width / context.height;
+        let theta = Math.acos(program_state.camera_inverse[0][0]) * (program_state.camera_inverse[0][3])/(Math.abs(program_state.camera_inverse[0][3])) * 1;
+        let y_t = (program_state.camera_inverse[2][1]) * (ar * 0.8);
+        this.rotation = vec4(theta, 0, 1, 0);
+        this.rot2 = Mat4.rotation(y_t, -1, 0, 0);
+        console.log(y_t)
+        this.velocity = vec3(initial_velocity[2] * (theta), initial_velocity[2] * y_t, initial_velocity[2]);
+        this.scale = vec3(0.1, 0.1, 0.4);
+    }
+
+    draw(context, program_state) {
+
+        this.scene.shapes.box.draw(context, program_state, this.model_transform, this.scene.materials.leaf);
 
     }
 }
@@ -449,6 +483,13 @@ class Floor extends KinematicObject {
         this.scene.shapes.box.draw(context, program_state, this.model_transform, this.materials.tex)
     }
 
+}
+
+class Crosshair {
+    constructor(scene) { this.scene = scene; }
+    draw(context, program_state, canvas) {
+        this.scene.shapes.crosshair.draw(context, program_state, Mat4.inverse(program_state.camera_inverse).times(Mat4.translation(0, 0, -3).times(Mat4.scale(0.05, 0.05, 0.05))), this.scene.materials.crosshair)
+    }
 }
 
 
