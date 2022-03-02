@@ -6,6 +6,11 @@ const {
     Vector, Vector3, vec, vec3, vec4, color, hex_color, Shader, Matrix, Mat4, Light, Shape, Material, Texture, Scene,
 } = tiny;
 
+var clicked = null;
+var mousedown = null;
+var mouseup = null;
+var mouse = null;
+
 export class Project extends Scene {
     constructor() {
         // constructor(): Scenes begin by populating initial values like the Shapes and Materials they'll need.
@@ -46,8 +51,15 @@ export class Project extends Scene {
             
         }
 
+        this.initial_eye = vec3(0, 2, 6);
         this.initial_camera_location = Mat4.look_at(vec3(0, 0, 10), vec3(0, 0, 0), vec3(0, 1, 0));
         this.camera_delta = vec3(0, 0, 0);
+
+        this.canvas = document.querySelector("#main-canvas");
+        this.canvas.addEventListener('mousedown', function(evt) { clicked = evt; mousedown = evt; });
+        this.canvas.addEventListener('mouseup', function(evt) { clicked = null; mousedown = null; mouseup = evt; });
+
+        this.canvas.addEventListener('mousemove', function(evt) { mouse = evt; });
 
         this.physics_objects = [
             new Apple(vec3(0, 5, -3), vec3(0, 1, 0), this),
@@ -72,6 +84,16 @@ export class Project extends Scene {
         this.speed = 1.0;
         this.fov_default = Math.PI / 4;
         this.fov_mult = 1.0;
+        this.fov_to = 1.0;
+        this.fov_drawn = 0.7;
+
+        this.tick = 0;
+        this.cooldown = 150;
+        this.last_mouse = null;
+        this.mouse_sens = 0.5;
+        this.play_scope_in = true;
+
+        this.camera_to = this.initial_camera_location;
 
     }
     make_control_panel() {
@@ -79,7 +101,7 @@ export class Project extends Scene {
         this.key_triggered_button("make objs jump", ["Control", "0"], function() {
             for(var obj of this.physics_objects) {
                 obj.add_impulse(vec3(Math.random()*1, Math.random()*12, Math.random()*1));
-                obj.angular_velocity = vec4(Math.random()*0.1, Math.random()*0.1, Math.random()*0.1, 0);
+                obj.angular_velocity = vec4(Math.random()*10, Math.random()*10, Math.random()*10, 0);
             }
         });
         this.new_line();
@@ -89,6 +111,8 @@ export class Project extends Scene {
         this.new_line();
         this.key_triggered_button("pause/play", ["p"], function() {
             this.ticking = !this.ticking;
+            document.querySelector("#hit").currentTime = 0;
+            document.querySelector("#hit").play();
         });
         this.new_line();
         this.key_triggered_button("half speed", ["h"], function() {
@@ -97,8 +121,8 @@ export class Project extends Scene {
         this.key_triggered_button("double speed", ["d"], function() {
             this.speed = this.speed * 2.0;
         });
-        this.key_triggered_button("tighten", ["t"], function() {
-            this.fov_mult -= 0.05;
+        this.key_triggered_button("scope", ["s"], function() {
+            
         });
         this.new_line();
     }
@@ -107,13 +131,37 @@ export class Project extends Scene {
         return (Math.random()-0.5)*scale;
     }
 
+    clicked(event) {
+        if(this.state == this.States.game) {
+            console.log(event, 'game')
+        }
+    }
+    game_toggleScope(bool) {
+        if(!bool) {
+            this.fov_to = 1.0;
+            document.querySelector("#drawback").currentTime = 0;
+            document.querySelector("#drawback").play();
+        } else {
+            this.fov_to = this.fov_drawn;
+            if(this.play_scope_in) {
+                document.querySelector("#draw").currentTime = 0;
+                document.querySelector("#draw").play();
+            }
+        }
+    }
+
     display(context, program_state) {
 
         //run the below regardless of state:
-        program_state.set_camera(this.initial_camera_location);
+        //program_state.set_camera(this.initial_camera_location);
+        program_state.camera_inverse = this.camera_to.map((x,i) => Vector.from(program_state.camera_inverse[i]).mix(x, 0.1));
         program_state.projection_transform = Mat4.perspective(this.fov_default * this.fov_mult, context.width / context.height, .1, 1000);
         const light_position = vec4(0, 8, 0, 1);
         program_state.lights = [new Light(light_position, hex_color('#ffffff'), 10**3)];
+
+        if(document.querySelector("canvas") != null) { 
+            this.canvas = document.querySelector("canvas");
+        }
 
         switch(this.state) {
 
@@ -160,7 +208,39 @@ export class Project extends Scene {
      */
     tickGame(program_state) {
 
+        if(this.tick % this.cooldown == 0) {
+            let xv = Math.random()*3 + 2.5;
+            if(Math.random() < 0.5) {
+                xv *= -1;
+            }
+            this.physics_objects.push(new Apple(vec3(-5*(xv / Math.abs(xv)), 5, -5), vec3(xv,(Math.random()*1) + 4, 0), this))
+        }
+
         this.tick_physics_objects(program_state);
+        this.fov_mult = this.lerp(this.fov_mult, this.fov_to, 0.07);
+
+        if(mousedown != null) { 
+            this.game_toggleScope(true);
+            this.play_scope_in = false;
+        }
+        if(mouseup != null) { 
+            this.game_toggleScope(false);
+            mouseup = null;
+            this.play_scope_in = true;
+        }
+        if(this.last_mouse && mouse) {
+            //console.log(program_state.camera_inverse, Mat4.look_at(vec3(0, 0, 10), vec3(0, 0, 0), vec3(0, 1, 0)));
+            let mid_to_mouse = vec(((mouse.clientX + window.scrollX) - (this.canvas.offsetLeft + (this.canvas.offsetWidth / 2))), 
+            ((mouse.clientY + window.scrollY) - (this.canvas.offsetTop + (this.canvas.offsetHeight / 2))));
+            mid_to_mouse = mid_to_mouse.times(this.mouse_sens);
+            let factor = 0.05;
+            this.camera_to = Mat4.look_at(this.initial_eye, vec3(mid_to_mouse[0] * factor, mid_to_mouse[1] * -1 * factor, 0), vec3(0, 1, 0));
+            //this.camera_to[0] = vec4(0, 0, 10, 0);
+            
+        }
+        this.last_mouse = mouse;
+
+        this.tick++;
 
     }
 
@@ -203,6 +283,9 @@ export class Project extends Scene {
         for(var object of this.physics_objects) {
             object.step(program_state, [this.kinematic_objects[0]]);
         }
+    }
+    lerp(a, b, t) {
+        return (1 - t) * a + t * b;
     }
 }
 
