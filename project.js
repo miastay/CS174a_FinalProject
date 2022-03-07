@@ -25,7 +25,14 @@ export class Project extends Scene {
             circle: new defs.Regular_2D_Polygon(1, 15),
             box: new defs.Cube(), 
             apple: new defs.Subdivision_Sphere(2),
-            crosshair: new defs.Regular_2D_Polygon(1, 4)
+            crosshair: new defs.Regular_2D_Polygon(1, 4),
+            arrowhead: new (defs.Closed_Cone.prototype.make_flat_shaded_version())(4,4,[[0,2],[0,1]]),
+            feather: new defs.Triangle(),
+            bow: new defs.Surface_Of_Revolution(30, 30,
+                Vector3.cast( [0,9.5,0], [0,10,.3],[0,10,.7],[0,9.5,1],[0,9.5,0]),
+                Vector3.cast( [0,9.5,0], [0,10,.3],[0,10,.7],[0,9.5,1],[0,9.5,0]),
+                Math.PI),
+            barrel: new defs.One_Capped_Cylinder(16,16,[[0,2],[0,1]])
         };
 
         this.base_ambient = 0.5;
@@ -52,7 +59,10 @@ export class Project extends Scene {
 
             crosshair: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/crosshair.png")}),
 
-            arrow_dark: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: color(0.26, 0.15, 0.15, 1)})
+            arrow_dark: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: color(0.26, 0.15, 0.15, 1)}),
+            arrowhead: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: hex_color("#9fa4ab")}),
+            feather: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: hex_color("#ffffff")}),
+            barrel: new defs.One_Capped_Cylinder(16,16,[[0,2],[0,1]])
 
         }
 
@@ -75,7 +85,8 @@ export class Project extends Scene {
         this.kinematic_objects = [
             new Floor(vec3(0, -0.5, 0), this, 0.75, 0.97),
             new Model(vec3(0, 0, 0), this),
-            new ChildModel(vec3(0, 0, 0), this)
+            new ChildModel(vec3(0, 0, 0), this),
+            new Bow(vec3(0, 0, 0), this),
         ]
 
         this.States = {
@@ -279,8 +290,8 @@ export class Project extends Scene {
             this.shapes.box.draw(context, program_state, Mat4.scale(1, 8, 10).times(Mat4.translation(10, 0, 0)), this.materials.phong)
         /* x- wall */
             this.shapes.box.draw(context, program_state, Mat4.scale(1, 8, 10).times(Mat4.translation(-10, 0, 0)), this.materials.phong)
-
-            //apple
+        //barrel
+            this.shapes.barrel.draw(context, program_state, Mat4.scale(2.5, 1.25, 1.25).times(Mat4.translation(1.6, 6, -6)).times(Mat4.rotation(Math.PI/2, 0, 1, 0)), this.materials.arrow_dark)
             
     }
 
@@ -438,7 +449,32 @@ class Arrow extends PhysicsObject {
 
     draw(context, program_state) {
 
-        this.scene.shapes.box.draw(context, program_state, this.model_transform, this.scene.materials.arrow_dark);
+        let arrow_transform = this.model_transform.times(Mat4.scale(1/4, 1/4, 3));
+        this.scene.shapes.box.draw(context, program_state, arrow_transform, this.scene.materials.arrow_dark);
+        let arrowhead_transform = this.model_transform.times(Mat4.translation(0, 0, -3.5))
+            .times(Mat4.scale(1/2, 1/2, 1/2))
+            .times(Mat4.rotation(Math.PI, 1, 0,0));
+        this.scene.shapes.arrowhead.draw(context, program_state, arrowhead_transform, this.scene.materials.arrowhead);
+        let feather1_transform = this.model_transform.times(Mat4.translation(1/4, 0, 2.8))
+            .times(Mat4.rotation(Math.PI*3/2, 1, 0,0))
+            .times(Mat4.scale(1, 1.5, 1));
+        this.scene.shapes.feather.draw(context, program_state, feather1_transform, this.scene.materials.feather);
+        let feather2_transform = this.model_transform.times(Mat4.translation(-1/4, 0, 2.8))
+            .times(Mat4.rotation(Math.PI/2, 1, 0,0))
+            .times(Mat4.rotation(Math.PI, 0, 0,1))
+            .times(Mat4.scale(1, 1.5, 1));
+        this.scene.shapes.feather.draw(context, program_state, feather2_transform, this.scene.materials.feather);
+        let feather3_transform = this.model_transform.times(Mat4.translation(0, 1/4, 2.8))
+            .times(Mat4.rotation(Math.PI*3/2, 0, 1,0))
+            .times(Mat4.rotation(Math.PI/2, 0, 0,1))
+            .times(Mat4.scale(1, 1.5, 1));
+        this.scene.shapes.feather.draw(context, program_state, feather3_transform, this.scene.materials.feather);
+        let feather4_transform = this.model_transform.times(Mat4.translation(0, -1/4, 2.8))
+            .times(Mat4.rotation(Math.PI*3/2, 0, 1,0))
+            .times(Mat4.rotation(Math.PI, 1, 0,0))
+            .times(Mat4.rotation(Math.PI/2, 0, 0,1))
+            .times(Mat4.scale(1, 1.5, 1));
+        this.scene.shapes.feather.draw(context, program_state, feather4_transform, this.scene.materials.feather);
 
     }
     step(program_state, kobjs) {
@@ -455,19 +491,20 @@ class Arrow extends PhysicsObject {
 }
 
 class Model extends KinematicObject {
-    
+
     constructor(position, scene) {
         super(position, scene);
-        this.model_transform = Mat4.translation(5, 0, 0);
+        this.model_transform = Mat4.translation(100, 0, 0);
     }
 
     draw(context, program_state) {
-        
+        let t = program_state.animation_time / 1000;
+
         //Head
         this.scene.shapes.box.draw(context, program_state, this.model_transform.times(Mat4.translation(0, 5.5, 0)), this.scene.materials.skin);
         //Face
         this.scene.shapes.box.draw(context, program_state, this.model_transform.times(Mat4.scale(1, 1, 0.01)).times(Mat4.translation(0, 5.5, 100)), this.scene.materials.face);
-        
+
         let body_transform = this.model_transform.times(Mat4.scale(1, 1.5, 0.5)).times(Mat4.translation(0, 2, 0))
         this.scene.shapes.box.draw(context, program_state, body_transform, this.scene.materials.shirt);
         //Legs
@@ -483,28 +520,36 @@ class Model extends KinematicObject {
     }
 }
 class ChildModel extends KinematicObject {
-    
+
     constructor(model_transform, scene) {
         super(model_transform, scene);
-        this.model_transform = Mat4.translation(5, 0, 0).times(Mat4.translation(-10, 0, 0)).times(Mat4.scale(.5, .5, .5));
+        this.model_transform = Mat4.translation(0, -1.75, -9).times(Mat4.scale(.5, .5, .5));
+
     }
 
     draw(context, program_state) {
-        
-        //Head
-        this.scene.shapes.box.draw(context, program_state, this.model_transform.times(Mat4.translation(0, 5.5, 0)), this.scene.materials.skin);
-        //Face
-        this.scene.shapes.box.draw(context, program_state, this.model_transform.times(Mat4.scale(1, 1, 0.01)).times(Mat4.translation(0, 5.5, 100)), this.scene.materials.face);
-
+        let t = program_state.animation_time / 1000;
+        //Body
         let body_transform = this.model_transform.times(Mat4.scale(1, 1.5, 0.5)).times(Mat4.translation(0, 2, 0))
         this.scene.shapes.box.draw(context, program_state, body_transform, this.scene.materials.shirt.override({color: color(0.5, 1, 0.5, 1)}));
+
+        //Head
+        const max_ang = Math.PI*0.5;
+        var rot_ang = 0.25*(Math.sin(Math.PI*t));
+        let head_transform = body_transform.times(Mat4.rotation(rot_ang, 0, 0, 1)).times(Mat4.scale(1, 1, 1)).times(Mat4.translation(0, 2, 0.25));
+        //this.model_transform.times(Mat4.translation(0, 5.5, 0))
+        this.scene.shapes.box.draw(context, program_state, head_transform, this.scene.materials.face);
         //Legs
-        this.scene.shapes.box.draw(context, program_state, this.model_transform.times(Mat4.scale(.5, 1.5, .5)).times(Mat4.translation(-1, 0, 0)), this.scene.materials.pants);
-        this.scene.shapes.box.draw(context, program_state, this.model_transform.times(Mat4.scale(.5, 1.5, .5)).times(Mat4.translation(1, 0, 0)), this.scene.materials.pants);
+        this.scene.shapes.box.draw(context, program_state, this.model_transform.times(Mat4.rotation(Math.sin(Math.PI/6), 0, -1, 0)).times(Mat4.scale(.5, .5, 1.5)).times(Mat4.translation(-1, 2, 1)), this.scene.materials.pants);
+        this.scene.shapes.box.draw(context, program_state, this.model_transform.times(Mat4.rotation(Math.sin(Math.PI/6), 0, 1, 0)).times(Mat4.scale(.5, .5, 1.5)).times(Mat4.translation(1, 2, 1)), this.scene.materials.pants);
 
         //Arms
         let larm_transform = body_transform.times(Mat4.scale(.5, 1, 1)).times(Mat4.translation(-3, 0, 0));
+        //larm_transform = larm_transform.times(Mat4.translation(0, 1, 0)).times(Mat4.rotation(Math.sin(t), 0, 0, 1)).times(Mat4.translation(0, -1, 0)).times(Mat4.scale(.5, 1, 1));
+
         let rarm_transform = body_transform.times(Mat4.scale(.5, 1, 1)).times(Mat4.translation(3, 0, 0));
+        //rarm_transform = rarm_transform.times(Mat4.translation(0, 1, 0)).times(Mat4.rotation(Math.sin(-t), 0, 0, 1)).times(Mat4.translation(0, -1, 0));
+
         this.scene.shapes.box.draw(context, program_state, larm_transform, this.scene.materials.skin)
         this.scene.shapes.box.draw(context, program_state, rarm_transform, this.scene.materials.skin)
 
@@ -529,6 +574,83 @@ class Floor extends KinematicObject {
 
 }
 
+class Bow extends KinematicObject {
+
+    constructor(position, scene, damp, friction) {
+        super(position, scene, damp, friction)
+        //this.model_transform = Mat4.translation(0, 2, -1).times(Mat4.rotation(Math.PI * -1/3,0,1,0));
+        //this.model_transform = Mat4.translation(0, 2, -1).times(Mat4.rotation(Math.PI * -1/3,0,1,0));
+        this.model_transform = Mat4.identity();
+        //this.model_transform =Mat4.inverse(program_state.camera_inverse);
+        //this.model_transform = this.model_transform.times(Mat4.translation(0, 5, 0));
+
+    }
+
+    draw(context, program_state) {
+        this.model_transform = Mat4.inverse(program_state.camera_inverse)
+            .times(Mat4.scale(1, 1, 1))
+            .times(Mat4.translation(1.7, 0, -.5))
+            .times(Mat4.rotation(Math.PI * -1/3,0,1,0))
+            //.times(Mat4.scale(1/2, 1/2, 1/2))
+        ;
+        //Mat4.inverse(program_state.camera_inverse).times(Mat4.translation(0, 0, -3).times(Mat4.scale(0.05, 0.05, 0.05)))
+        let bow_transform = this.model_transform.times(Mat4.scale(1/5, 1/5, 1/5));
+        //let bow_transform = Mat4.inverse(program_state.camera_inverse).times(Mat4.scale(0.05, 0.05, 0.05));
+        this.scene.shapes.bow.draw(context, program_state, bow_transform, this.scene.materials.arrow_dark);
+        let bowstring_transform = this.model_transform.times(Mat4.scale(0.02, 1.9, .02))
+            .times(Mat4.translation(-5, 0, 5));
+        this.scene.shapes.box.draw(context, program_state, bowstring_transform, this.scene.materials.feather);
+
+
+        this.model_transform = Mat4.inverse(program_state.camera_inverse)
+            .times(Mat4.scale(1/8, 1/8, 1))
+            .times(Mat4.translation(4, 0, 1))
+            .times(Mat4.rotation(Math.PI/36,0,1,0));
+
+        let arrow_transform = this.model_transform.times(Mat4.scale(1/4, 1/4, 3));
+        this.scene.shapes.box.draw(context, program_state, arrow_transform, this.scene.materials.arrow_dark);
+        let arrowhead_transform = this.model_transform.times(Mat4.translation(0, 0, -3.5))
+            .times(Mat4.scale(1/2, 1/2, 1/2))
+            .times(Mat4.rotation(Math.PI, 1, 0,0));
+        this.scene.shapes.arrowhead.draw(context, program_state, arrowhead_transform, this.scene.materials.arrowhead);
+        let feather1_transform = this.model_transform.times(Mat4.translation(1/4, 0, 2.8))
+            .times(Mat4.rotation(Math.PI*3/2, 1, 0,0))
+            .times(Mat4.scale(1, 1.5, 1));
+        this.scene.shapes.feather.draw(context, program_state, feather1_transform, this.scene.materials.feather);
+        let feather2_transform = this.model_transform.times(Mat4.translation(-1/4, 0, 2.8))
+            .times(Mat4.rotation(Math.PI/2, 1, 0,0))
+            .times(Mat4.rotation(Math.PI, 0, 0,1))
+            .times(Mat4.scale(1, 1.5, 1));
+        this.scene.shapes.feather.draw(context, program_state, feather2_transform, this.scene.materials.feather);
+        let feather3_transform = this.model_transform.times(Mat4.translation(0, 1/4, 2.8))
+            .times(Mat4.rotation(Math.PI*3/2, 0, 1,0))
+            .times(Mat4.rotation(Math.PI/2, 0, 0,1))
+            .times(Mat4.scale(1, 1.5, 1));
+        this.scene.shapes.feather.draw(context, program_state, feather3_transform, this.scene.materials.feather);
+        let feather4_transform = this.model_transform.times(Mat4.translation(0, -1/4, 2.8))
+            .times(Mat4.rotation(Math.PI*3/2, 0, 1,0))
+            .times(Mat4.rotation(Math.PI, 1, 0,0))
+            .times(Mat4.rotation(Math.PI/2, 0, 0,1))
+            .times(Mat4.scale(1, 1.5, 1));
+        this.scene.shapes.feather.draw(context, program_state, feather4_transform, this.scene.materials.feather);
+        /*
+        let bowstring_transform = this.model_transform.times(Mat4.scale(0.02, .9, .02))
+            .times(Mat4.translation(-5, 1.1, 5));
+        this.scene.shapes.box.draw(context, program_state, bowstring_transform, this.scene.materials.feather);
+        let bowstring_transform2 = this.model_transform.times(Mat4.scale(0.02, .9, .02))
+            .times(Mat4.translation(-5, -1.1, 5));
+        this.scene.shapes.box.draw(context, program_state, bowstring_transform2, this.scene.materials.feather);
+        let bowstring_transform3 = this.model_transform.times(Mat4.scale(0.02, .2, .02))
+            .times(Mat4.translation(-5, 0, 1/4));
+        this.scene.shapes.box.draw(context, program_state, bowstring_transform3, this.scene.materials.feather);
+
+         */
+
+
+
+    }
+
+}
 class Crosshair {
     constructor(scene) { this.scene = scene; }
     draw(context, program_state, canvas) {
