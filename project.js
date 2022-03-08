@@ -55,15 +55,17 @@ export class Project extends Scene {
             shirt: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: hex_color("494697")}),
             pants: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: hex_color("#0eaeae")}),
 
-            face: new Material(new defs.Fake_Bump_Map(1), {ambient: .5, texture: new Texture("assets/face.png")}),
+            face: new Material(new defs.Fake_Bump_Map(1), {ambient: .5, texture: new Texture("assets/face.gif")}),
 
             crosshair: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/crosshair.png")}),
 
             arrow_dark: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: color(0.26, 0.15, 0.15, 1)}),
             arrowhead: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: hex_color("#9fa4ab")}),
             feather: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: hex_color("#ffffff")}),
-            barrel: new defs.One_Capped_Cylinder(16,16,[[0,2],[0,1]])
-
+            barrel: new defs.One_Capped_Cylinder(16,16,[[0,2],[0,1]]),
+            level1: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/Level1.png")}),
+            level2: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/Level2.png")}),
+            level3: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/Level3.png")}),
         }
 
         this.initial_eye = vec3(0, 2, 6);
@@ -112,6 +114,7 @@ export class Project extends Scene {
         this.initial_arrow_vel = vec3(0, 0, -25);
 
         this.crosshair = new Crosshair(this);
+        this.levelCounter = new LevelCounter(this);
 
         this.camera_to = this.initial_camera_location;
 
@@ -230,6 +233,7 @@ export class Project extends Scene {
 
         this.draw_physics_objects(context, program_state);
         this.crosshair.draw(context, program_state, this.canvas)
+        this.levelCounter.draw(context, program_state, this.canvas)
 
     }
     /**
@@ -285,7 +289,8 @@ export class Project extends Scene {
         /* floor */
             //this.shapes.box.draw(context, program_state, Mat4.scale(10, 0.5, 10).times(Mat4.translation(0, -4, 0)), this.materials.tex)
         /* z- wall */
-            //this.shapes.box.draw(context, program_state, Mat4.scale(10, 8, 1).times(Mat4.translation(0, 0, -10)), this.materials.phong)
+            this.shapes.box.draw(context, program_state, Mat4.scale(10, 8, 1).times(Mat4.translation(0, 0, -10)), this.materials.phong)
+            this.shapes.box.draw(context, program_state, Mat4.scale(2, 0.25, 1.25).times(Mat4.translation(2, 25, -6)), this.materials.test2)
         /* x+ wall */
             this.shapes.box.draw(context, program_state, Mat4.scale(1, 8, 10).times(Mat4.translation(10, 0, 0)), this.materials.phong)
         /* x- wall */
@@ -658,7 +663,20 @@ class Crosshair {
     }
 }
 
+class LevelCounter {
+    constructor(scene) { this.scene = scene; }
+    draw(context, program_state, canvas) {
+        let t = program_state.animation_time / 1000;
+        if (t < 10){
+            this.scene.shapes.box.draw(context, program_state, Mat4.inverse(program_state.camera_inverse).times(Mat4.translation(-1.9, 1.05, -3).times(Mat4.scale(1/4, 1/8, 0.01))), this.scene.materials.level1)
+        } else if (t < 20){
+            this.scene.shapes.box.draw(context, program_state, Mat4.inverse(program_state.camera_inverse).times(Mat4.translation(-1.9, 1.05, -3).times(Mat4.scale(1/4, 1/8, 0.01))), this.scene.materials.level2)
+        } else{
+            this.scene.shapes.box.draw(context, program_state, Mat4.inverse(program_state.camera_inverse).times(Mat4.translation(-1.9, 1.05, -3).times(Mat4.scale(1/4, 1/8, 0.01))), this.scene.materials.level3)
+        }
 
+    }
+}
 
 
 
