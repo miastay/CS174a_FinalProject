@@ -32,7 +32,8 @@ export class Project extends Scene {
                 Vector3.cast( [0,9.5,0], [0,10,.3],[0,10,.7],[0,9.5,1],[0,9.5,0]),
                 Vector3.cast( [0,9.5,0], [0,10,.3],[0,10,.7],[0,9.5,1],[0,9.5,0]),
                 Math.PI),
-            barrel: new defs.One_Capped_Cylinder(16,16,[[0,2],[0,1]])
+            barrel: new defs.One_Capped_Cylinder(16,16,[[0,2],[0,1]]),
+            text: new Text_Line(35)
         };
 
         this.base_ambient = 0.5;
@@ -66,7 +67,12 @@ export class Project extends Scene {
             level1: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/Level1.png")}),
             level2: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/Level2.png")}),
             level3: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/Level3.png")}),
+
         }
+        this.text_image = new Material(new defs.Textured_Phong(1), {
+            ambient: 1, diffusivity: 0, specularity: 0,
+            texture: new Texture("assets/text.png")
+        });
 
         this.initial_eye = vec3(0, 2, 6);
         this.initial_camera_location = Mat4.look_at(vec3(0, 0, 10), vec3(0, 0, 0), vec3(0, 1, 0));
@@ -78,6 +84,8 @@ export class Project extends Scene {
 
         this.canvas.addEventListener('mousemove', function(evt) { mouse = evt; });
 
+        this.child = new ChildModel(vec3(0, 0, 0), this);
+
         this.physics_objects = [
             new Apple(vec3(0, 5, -3), vec3(0, 1, 0), this),
             new Apple(vec3(0, 5, -3), vec3(0, 0, 1), this),
@@ -87,17 +95,22 @@ export class Project extends Scene {
         this.kinematic_objects = [
             new Floor(vec3(0, -0.5, 0), this, 0.75, 0.97),
             new Model(vec3(0, 0, 0), this),
-            new ChildModel(vec3(0, 0, 0), this),
+            this.child,
             new Bow(vec3(0, 0, 0), this),
         ]
 
         this.States = {
             'animation' : 0,
             'game' : 1,
+            'gameOver' : 2,
             'none': null
         }
 
         this.state = this.States.game;
+        this.level = 1;
+        this.apples_thrown = 0;
+        this.lives = 3;
+        this.score = 0;
         this.ticking = true;
         this.speed = 1.0;
         this.fov_default = Math.PI / 4;
@@ -106,7 +119,10 @@ export class Project extends Scene {
         this.fov_drawn = 0.7;
 
         this.tick = 0;
+        this.level_start = 1;
         this.cooldown = 150;
+        this.temp_cooldown = 0;
+        this.base_cooldown = 150;
         this.last_mouse = null;
         this.mouse_sens = 0.5;
         this.play_scope_in = true;
@@ -178,6 +194,8 @@ export class Project extends Scene {
     game_appleHit(apple) {
         document.querySelector("#hit").currentTime = 0;
         document.querySelector("#hit").play();
+        //this.score += ((this.level * 10) - Math.max(5, (0.01 * (this.tick - apple.born))));
+        this.score += (Math.round((((apple.lifetime * 0.5) - (this.tick - apple.born)) / (apple.lifetime * 0.5)) * 20) + (this.level * 5));
         apple.kill();
     }
 
@@ -215,6 +233,10 @@ export class Project extends Scene {
 
             }   break;
 
+            case this.States.gameOver : {
+
+            }   break;
+
 
             default : {
                 tickDefault(context, program_state);
@@ -232,8 +254,17 @@ export class Project extends Scene {
     drawGame(context, program_state) {
 
         this.draw_physics_objects(context, program_state);
-        this.crosshair.draw(context, program_state, this.canvas)
-        this.levelCounter.draw(context, program_state, this.canvas)
+        this.crosshair.draw(context, program_state, this.canvas);
+        this.levelCounter.draw(context, program_state, this.canvas);
+
+        this.shapes.text.set_string(`Level ${this.level}`, context.context);
+        this.shapes.text.draw(context, program_state, Mat4.identity().times(Mat4.translation(-6, 4.25, -8.7)).times(Mat4.scale(0.4, 0.4, 1)), this.text_image);
+
+        this.shapes.text.set_string(`Lives: ${this.lives}`, context.context);
+        this.shapes.text.draw(context, program_state, Mat4.identity().times(Mat4.translation(-6, 3.5, -8.7)).times(Mat4.scale(0.4, 0.4, 1)), this.text_image);
+
+        this.shapes.text.set_string(`Score: ${this.score}`, context.context);
+        this.shapes.text.draw(context, program_state, Mat4.identity().times(Mat4.translation(-6, 2.75, -8.7)).times(Mat4.scale(0.3, 0.3, 1)), this.text_image);
 
     }
     /**
@@ -241,13 +272,36 @@ export class Project extends Scene {
      */
     tickGame(context, program_state) {
 
-        if(this.tick % this.cooldown == 0) {
+        if(this.lives <= 0) {
+            this.state = this.States.gameOver;
+        }
+
+        if(this.level_start % this.cooldown == 0 && this.temp_cooldown <= 0) {
+            
+            if(this.apples_thrown > (this.level * 2) + 3) {
+                this.level++;
+                this.apples_thrown = 0;
+                this.lives = 3;
+                this.temp_cooldown = 150;
+                this.cooldown = (this.base_cooldown - this.level);
+                this.level_start = 0;
+                this.score += this.level * 100;
+                return;
+            }
+            this.cooldown = Math.max(50, this.cooldown - 1);
             let xv = Math.random()*3 + 2.5;
             if(Math.random() < 0.5) {
                 xv *= -1;
             }
-            this.physics_objects.push(new Apple(vec3(-5*(xv / Math.abs(xv)), 5, -5), vec3(xv,((Math.random()*1) + 1) + 4, 0), this))
+            this.physics_objects.push(new Apple(vec3(-5*(xv / Math.abs(xv)), 5, -8.9), vec3(xv,((Math.random()*1) + 1) + 4, 0), this));
+            this.apples_thrown++;
+            
+            
         }
+        if(this.temp_cooldown <= 0)
+            this.level_start++;
+        else
+            this.temp_cooldown--;
 
         this.tick_physics_objects(program_state);
         this.fov_mult = this.lerp(this.fov_mult, this.fov_to, 0.07);
@@ -315,9 +369,18 @@ export class Project extends Scene {
         }
     }
     tick_physics_objects(program_state) {
+
+        let kills = this.physics_objects.filter(x => x.killed);
+        this.physics_objects = this.physics_objects.filter(x => !x.killed);
+
         for(var object of this.physics_objects) {
             object.step(program_state, [this.kinematic_objects[0]]);
         }
+        while(kills.length > 0) {
+            console.log(kills)
+            delete kills.pop();
+        }
+
     }
     lerp(a, b, t) {
         return (1 - t) * a + t * b;
@@ -337,8 +400,16 @@ class PhysicsObject {
         this.angular_velocity = vec4(0, 0, 0, 0);
         this.angular_drag = 0.95;
         this.radius = 1.0;
+        this.killed = false;
+        this.born = scene.tick;
+        this.lifetime = 5000;
     }
     step(program_state, kobjs) {
+
+        if(this.scene.tick > this.born + this.lifetime) {
+            this.killed = true;
+        }
+
         const t = program_state.animation_time;
         const dt = program_state.animation_delta_time;
 
@@ -401,19 +472,36 @@ class Apple extends PhysicsObject {
         this.scale = vec3(0.4, 0.4, 0.4);
         this.color = color(Math.random()*0.5 + 0.5, 0, 0, 1);
         this.radius = 0.5;
-        this.alpha = 1.0;
-        this.alpha_to = 1.0;
+        this.alpha = 0.0;
+        this.alpha_to = 0.0;
+        this.born = scene.tick;
+        this.lifetime = 700;
+    }
+
+    step(program_state, kobjs) {
+        super.step(program_state, kobjs);
+        if(this.position[2] <= -9) {
+            this.velocity = vec3(0, 0, 0);
+            this.angular_velocity = vec4(0, 0, 0, 0);
+        }
+        if(this.is_colliding_k(this.scene.child)) {
+            this.kill();
+            this.killed = true;
+            this.scene.lives--;
+            console.log("apple hit kid")
+        }
     }
 
     draw(context, program_state) {
-        this.color = color(this.color[0], 0, 0, this.alpha);
+        this.color = color(this.color[0], 0, 0, 1);
+        this.color = this.color.plus(vec4(this.alpha, this.alpha, this.alpha, this.alpha));
         let apple_transform = this.model_transform.times(Mat4.rotation(Math.PI, 0, 0, 1));
         this.scene.shapes.apple.draw(context, program_state, apple_transform, this.scene.materials.apple.override({color: this.color}));
 
         let stem_transform = this.model_transform.times(Mat4.translation(0, 1, 0))
             .times(Mat4.scale(.1, .35, .1));
         let stem_color = hex_color("#693423");
-        stem_color[3] = this.alpha;
+        stem_color = stem_color.plus(vec4(this.alpha, this.alpha, this.alpha, this.alpha));
         this.scene.shapes.box.draw(context, program_state, stem_transform, this.scene.materials.stem.override({color: stem_color}));
 
         let leaf_transform = this.model_transform.times(Mat4.translation(0.5, 1.2, 0))
@@ -421,17 +509,17 @@ class Apple extends PhysicsObject {
             .times(Mat4.rotation(Math.PI/6, 0, 0, 1));
 
         let leaf_color = hex_color("#2cb733");
-        leaf_color[3] = this.alpha;
+        leaf_color = leaf_color.plus(vec4(this.alpha, this.alpha, this.alpha, this.alpha));
         this.scene.shapes.box.draw(context, program_state, leaf_transform, this.scene.materials.leaf.override({color: leaf_color}));
-        this.alpha = this.scene.lerp(this.alpha, this.alpha_to, 0.1);
-        if(this.alpha < 0.1) {
-            delete this;
+        this.alpha = this.scene.lerp(this.alpha, this.alpha_to, 0.05);
+        if(this.alpha > 0.9 || this.scene.tick > this.born + Math.round(this.lifetime * 0.8)) {
+            this.kill();
         }
     }
 
     kill() {
         this.wasHit = true;
-        this.alpha_to = 0.0;
+        this.alpha_to = 1.0;
     }
 }
 
@@ -449,7 +537,9 @@ class Arrow extends PhysicsObject {
         this.scale = vec3(0.1, 0.1, 0.4);
         this.radius = 0.2;
         this.angular_drag = 0.0;
-        this.angular_velocity = vec4(0, 0, 10, 1)
+        this.angular_velocity = vec4(0, 0, 10, 1);
+        this.born = scene.tick;
+        this.lifetime = 200;
     }
 
     draw(context, program_state) {
@@ -529,7 +619,7 @@ class ChildModel extends KinematicObject {
     constructor(model_transform, scene) {
         super(model_transform, scene);
         this.model_transform = Mat4.translation(0, -1.75, -9).times(Mat4.scale(.5, .5, .5));
-
+        this.bounds = [-0.75, 0, -8.99, 0.75, 1, -8.8]
     }
 
     draw(context, program_state) {
@@ -612,9 +702,9 @@ class Bow extends KinematicObject {
             .times(Mat4.translation(4, 0, 1))
             .times(Mat4.rotation(Math.PI/36,0,1,0));
 
-        let arrow_transform = this.model_transform.times(Mat4.scale(1/4, 1/4, 3));
+        let arrow_transform = this.model_transform.times(Mat4.scale(1/4, 1/4, 3)).times(Mat4.translation(0, 0, -1 * (this.scene.fov_mult - 1)));
         this.scene.shapes.box.draw(context, program_state, arrow_transform, this.scene.materials.arrow_dark);
-        let arrowhead_transform = this.model_transform.times(Mat4.translation(0, 0, -3.5))
+        let arrowhead_transform = this.model_transform.times(Mat4.translation(0, 0, (-3 * (this.scene.fov_mult - 1)) - 3.5))
             .times(Mat4.scale(1/2, 1/2, 1/2))
             .times(Mat4.rotation(Math.PI, 1, 0,0));
         this.scene.shapes.arrowhead.draw(context, program_state, arrowhead_transform, this.scene.materials.arrowhead);
@@ -675,6 +765,48 @@ class LevelCounter {
             this.scene.shapes.box.draw(context, program_state, Mat4.inverse(program_state.camera_inverse).times(Mat4.translation(-1.9, 1.05, -3).times(Mat4.scale(1/4, 1/8, 0.01))), this.scene.materials.level3)
         }
 
+    }
+}
+
+export class Text_Line extends Shape {                           // **Text_Line** embeds text in the 3D world, using a crude texture
+    // method.  This Shape is made of a horizontal arrangement of quads.
+    // Each is textured over with images of ASCII characters, spelling
+    // out a string.  Usage:  Instantiate the Shape with the desired
+    // character line width.  Then assign it a single-line string by calling
+    // set_string("your string") on it. Draw the shape on a material
+    // with full ambient weight, and text.png assigned as its texture
+    // file.  For multi-line strings, repeat this process and draw with
+    // a different matrix.
+    constructor(max_size) {
+        super("position", "normal", "texture_coord");
+        this.max_size = max_size;
+        var object_transform = Mat4.identity();
+        for (var i = 0; i < max_size; i++) {                                       // Each quad is a separate Square instance:
+            defs.Square.insert_transformed_copy_into(this, [], object_transform);
+            object_transform.post_multiply(Mat4.translation(1.5, 0, 0));
+        }
+    }
+
+    set_string(line, context) {             // set_string():  Call this to overwrite the texture coordinates buffer with new
+                                            // values per quad, which enclose each of the string's characters.
+        this.arrays.texture_coord = [];
+        for (var i = 0; i < this.max_size; i++) {
+            var row = Math.floor((i < line.length ? line.charCodeAt(i) : ' '.charCodeAt()) / 16),
+                col = Math.floor((i < line.length ? line.charCodeAt(i) : ' '.charCodeAt()) % 16);
+
+            var skip = 3, size = 32, sizefloor = size - skip;
+            var dim = size * 16,
+                left = (col * size + skip) / dim, top = (row * size + skip) / dim,
+                right = (col * size + sizefloor) / dim, bottom = (row * size + sizefloor + 5) / dim;
+
+            this.arrays.texture_coord.push(...Vector.cast([left, 1 - bottom], [right, 1 - bottom],
+                [left, 1 - top], [right, 1 - top]));
+        }
+        if (!this.existing) {
+            this.copy_onto_graphics_card(context);
+            this.existing = true;
+        } else
+            this.copy_onto_graphics_card(context, ["texture_coord"], false);
     }
 }
 
