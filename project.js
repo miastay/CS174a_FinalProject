@@ -314,6 +314,10 @@ export class Project extends Scene {
         <p>Be careful, any apple that hits your child will cause them to lose health. If 5 apples hit them during one level, the game will end!</p>
         <p>Be on the lookout for special <strong>golden apples</strong>--if you hit one with an arrow, it will slow down the apples and make them easier to hit. You'll also get a big score bonus!</p>
         <p>Press <strong>p</strong> to pause.</p>`;
+        let canvas = document_element.parentNode.children[1];
+        let expl = document_element.parentNode.children[0];
+        document_element.parentNode.appendChild(expl);
+        document_element.parentNode.style.marginTop = "100px";
     }
 
     runStart(context, program_state) {
@@ -676,7 +680,7 @@ class Apple extends PhysicsObject {
         this.rotation = vec4(1, 0, 0, 1);
         this.angular_velocity = vec4(Math.random()*10, Math.random()*10, Math.random()*10, 0);
         this.scale = vec3(0.4, 0.4, 0.4);
-        this.color = color(Math.random()*0.5 + 0.5, 0, 0, 1);
+        this.color = (Math.random() < 0.4 ? color(Math.random()*0.7 + 0.3, 0, 0, 1) : color(0.3, Math.random()*0.5 + 0.2, 0, 1))
         this.init_color = this.color;
         this.radius = 0.3;
         this.alpha = 0.0;
@@ -804,9 +808,13 @@ class Arrow extends PhysicsObject {
     step(program_state, kobjs) {
         super.step(program_state, kobjs);
 
-        if(this.position[0] > -1 && this.position[0] < 1
-            && this.position[1] > -2 && this.position[1] < 2
-            && this.position[2] > -10 && this.position[2] < -7) {
+        if((this.position[0] > -0.6 && this.position[0] < 0.6
+            && this.position[1] > 0.6 && this.position[1] < 2
+            && (this.position[2]-0.4) > -10 && (this.position[2]-0.4) < -7)
+            ||
+            (this.position[0] > -1 && this.position[0] < 1
+                && this.position[1] > -2 && this.position[1] < 0.6
+                && (this.position[2]-0.4) > -10 && (this.position[2]-0.4) < -7)) {
             this.scene.game_childArrow(this);
         }
 
