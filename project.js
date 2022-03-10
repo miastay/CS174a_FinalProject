@@ -10,6 +10,7 @@ var clicked = null;
 var mousedown = null;
 var mouseup = null;
 var mouse = null;
+var isR = false;
 
 export class Project extends Scene {
     constructor() {
@@ -66,8 +67,9 @@ export class Project extends Scene {
 
             menu: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/pausemenu.png")}),
             start_menu: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/startmenu.png")}),
-            pause_menu: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/pausemenu.png")}),
+            pause_menu: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/pause.png")}),
             gameover_menu: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/gameover.png")}),
+            gameoverchild_menu: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/gameoverchild.png")}),
 
             arrow_dark: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: color(0.26, 0.15, 0.15, 1)}),
             arrowhead: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: hex_color("#9fa4ab")}),
@@ -110,13 +112,26 @@ export class Project extends Scene {
             'gameOverChild' : 3,
             'none': null
         }
+        
+        this.crosshair = new Crosshair(this);
+        this.pause = new Menu(this, "pause");
+        this.startm = new Menu(this, "start");
+        this.gameoverm = new Menu(this, "gameover");
+        this.gameoverchildm = new Menu(this, "gameoverchild");
+
         this.reset();
 
     }
+
     reset() {
+        isR = false;
         this.state = this.States.start;
         this.level = 1;
         this.apples_thrown = 0;
+        this.total_apples_thrown = 0;
+        this.dist_sum = 0;
+        this.true_accuracy = 0;
+        this.apples_hit = 0;
         this.def_lives = 5;
         this.lives = this.def_lives;
         this.score = 0;
@@ -132,6 +147,7 @@ export class Project extends Scene {
         this.cam_lerp = 0.05;
         this.cam_lerp_to = 0.05;
 
+        this.accuracy = 0.0;
         this.tick = 0;
         this.level_start = 1;
         this.level_start_float = 1;
@@ -148,12 +164,8 @@ export class Project extends Scene {
 
         this.initial_arrow_vel = vec3(0, 0, -25);
 
-        this.crosshair = new Crosshair(this);
-        this.pause = new Menu(this, "pause");
-        this.startm = new Menu(this, "start");
-        this.gameoverm = new Menu(this, "gameover");
-
         this.camera_to = this.initial_camera_location;
+        this.physics_objects = [];
     }
     make_control_panel() {
         // Draw the scene's buttons, setup their actions and keyboard shortcuts, and monitor live measurements.
@@ -205,18 +217,26 @@ export class Project extends Scene {
         document.querySelector("#drawback").volume = (this.volume * 0.6);
         document.querySelector("#drawback").currentTime = 0;
         document.querySelector("#drawback").play();
-        this.physics_objects.push(new Arrow(this.initial_eye, this.initial_arrow_vel.times(fov**4), this, program_state, context))
+        this.physics_objects.push(new Arrow(this.initial_eye, this.initial_arrow_vel.times(fov**4), this, program_state, context));
+        this.accuracy = (this.total_apples_thrown == 0 ? 1 : this.apples_hit) / (this.total_apples_thrown == 0 ? 1 : this.total_apples_thrown);
+        //minimum accuracy is 0, maximum is 1
+        //max of dist_sum is apples_hit * 0.5, min is 0
+        console.log(this.dist_sum)
+        this.true_accuracy = 1 - ((this.dist_sum)/(this.apples_hit * 0.5));
     }
 
     game_appleHit(arrow, apple) {
         apple.hit_when = apple.scene.tick;
         apple.last_rot = apple.rotation;
         apple.kill();
-        let dist = this.dist(arrow.position, apple.position);
+        let arrowpos = vec3(arrow.position[0], arrow.position[1], arrow.position[2]-0.4);
+        let dist = this.dist(arrowpos, apple.position);
+        this.dist_sum += dist;
         dist = Math.max(0, Math.min(dist, 0.5));
         dist = (0.5 - dist)/0.5;
         let diff = Math.round(Math.exp((dist + 1)*2)) + (this.level * 5);
         this.score += diff;
+        this.apples_hit++;
         this.kinematic_objects.push(new ScoreText(apple.position, this, `+${diff}`))
         document.querySelector("#hit").volume = (this.volume * 0.6);
         document.querySelector("#hit").currentTime = 0;
@@ -243,7 +263,7 @@ export class Project extends Scene {
         this.state = this.States.gameOverChild;
     }
     game_spawnConfetti() {
-        if(this.particles > 12) {
+        if(this.particles > 5) {
             this.particles = 0;
             return this.confetti = false;
         }
@@ -260,7 +280,6 @@ export class Project extends Scene {
 
         //run the below regardless of state:
         //program_state.set_camera(this.initial_camera_location);
-        console.log(this.state);
         this.cam_lerp = this.lerp(this.cam_lerp, this.cam_lerp_to, 0.05);
         program_state.camera_inverse = this.camera_to.map((x,i) => Vector.from(program_state.camera_inverse[i]).mix(x, this.cam_lerp));
         program_state.projection_transform = Mat4.perspective(this.fov_default * this.fov_mult, context.width / context.height, .1, 1000);
@@ -299,7 +318,7 @@ export class Project extends Scene {
             }   break;
 
             case this.States.gameOverChild : {
-
+                this.runGameOverChild(context, program_state);
             }   break;
 
 
@@ -307,13 +326,13 @@ export class Project extends Scene {
                 tickDefault(context, program_state);
             }
         }
-
         this.draw_light_gadgets(context, program_state);
         this.draw_environment(context, program_state);
 
     }
 
     runStart(context, program_state) {
+        this.fov_mult = 1.0;
         this.startm.draw(context, program_state, this.canvas);
         this.camera_to = Mat4.look_at(this.initial_eye, vec3(-10, 0, 0), vec3(0, 1, 0));
         if(clicked != null) {
@@ -325,14 +344,49 @@ export class Project extends Scene {
         }
     }
     runGameOver(context, program_state) {
+        this.fov_mult = 1.0;
         this.gameoverm.draw(context, program_state, this.canvas);
         this.camera_to = Mat4.look_at(this.initial_eye, vec3(10, 0, 0), vec3(0, 1, 0));
-        if(clicked != null) {
-            clicked = null;
+
+        this.shapes.text.set_string(`${this.score}`, context.context);
+        this.shapes.text.draw(context, program_state, Mat4.inverse(program_state.camera_inverse).times(Mat4.translation(-0.1, 0.045, -1).times(Mat4.scale(0.027, 0.027, 1))), this.text_image.override({color: color(0, 1, 0.5, 0.9)}));
+
+        this.shapes.text.set_string(`${Math.round(this.accuracy * 10000)/100/*Math.round(this.accuracy * 10000)/100*/}%`, context.context);
+        this.shapes.text.draw(context, program_state, Mat4.inverse(program_state.camera_inverse).times(Mat4.translation(-0.025, -0.025, -1).times(Mat4.scale(0.027, 0.027, 1))), this.text_image.override({color: color(0, 1, 1, 1)}));
+
+        this.shapes.text.set_string(`${Math.round(this.true_accuracy * 10000)/100/*Math.round(this.accuracy * 10000)/100*/}%`, context.context);
+        this.shapes.text.draw(context, program_state, Mat4.inverse(program_state.camera_inverse).times(Mat4.translation(0.07, -0.08, -1).times(Mat4.scale(0.02, 0.02, 1))), this.text_image.override({color: color(0.4, 0.4, 0.4, 0.6)}));
+
+        document.body.onkeyup = function(event) {
+            if(event.key.toLowerCase() == "r") {
+                isR = true;
+            }
+        }
+        if(isR) {
             this.reset();
             this.paused = false;
             this.temp_cooldown = 300;
             this.state = this.States.game;
+            document.body.onkeyup = null;
+            return;
+        }
+    }
+    runGameOverChild(context, program_state) {
+        this.fov_mult = 1.0;
+        this.gameoverchildm.draw(context, program_state, this.canvas);
+        this.camera_to = Mat4.look_at(this.initial_eye, vec3(10, 0, 0), vec3(0, 1, 0));
+
+        document.body.onkeyup = function(event) {
+            if(event.key.toLowerCase() == "r") {
+                isR = true;
+            }
+        }
+        if(isR) {
+            this.reset();
+            this.paused = false;
+            this.temp_cooldown = 300;
+            this.state = this.States.game;
+            document.body.onkeyup = null;
             return;
         }
     }
@@ -403,9 +457,9 @@ export class Project extends Scene {
                 }
                 this.physics_objects.push(new Apple(vec3(-5*(xv / Math.abs(xv)), 7, -8.9), vec3(xv, 3, 0), this));
                 this.apples_thrown++;
+                this.total_apples_thrown++;
                 if(Math.random()*100 < 9 && this.slow < 0 && this.apples_thrown < (this.level * 1.5)) {
                     this.physics_objects.push(new GoldenApple(vec3(0, 10, -8.9), vec3(this.mro(3), Math.random()*4, 0), this));
-                    this.apples_thrown++;
                 }
                 
             }
@@ -447,11 +501,18 @@ export class Project extends Scene {
             if(this.tick%10 == 0) this.fps = Math.round(100000 / program_state.animation_delta_time) / 100;
         } else {
             this.fov_mult = 1.0;
-            if(clicked != null) {
-                if(this.paused) { 
-                    this.paused = false;
+            document.body.onkeyup = function(event) {
+                if(event.key.toLowerCase() == "r") {
+                    isR = true;
                 }
-                clicked = null;
+            }
+            if(isR) {
+                this.reset();
+                this.paused = false;
+                this.temp_cooldown = 300;
+                this.state = this.States.game;
+                document.body.onkeyup = null;
+                return;
             }
         }
     }
@@ -724,6 +785,7 @@ class Arrow extends PhysicsObject {
         this.last_rot = vec4(0, 0, 0, 0);
         this.hit_apple = null;
         this.hit_when = -1;
+        this.hit_wall = false;
     }
 
     draw(context, program_state) {
@@ -778,11 +840,16 @@ class Arrow extends PhysicsObject {
                 }
             }
         }
-        if(this.hit_apple) {
+        if(this.position[2] <= -9 && !this.hit_wall) { 
+            this.hit_wall = true; 
+            this.hit_when = this.scene.tick; 
+            this.last_rot = this.rotation; 
+        }
+        if(this.hit_apple || this.position[2] <= -9) {
             //this.position = this.hit_apple.position;
             this.velocity = vec3(0, 0, 0);
             this.acceleration = vec3(0, 0, 0);
-            this.rotation = this.last_rot.plus(vec4(3*this.wobble(0.2*(this.scene.tick - this.hit_when + 15)) + this.last_rot[0], 0, 0, 0));
+            this.rotation = this.last_rot.plus(vec4(3*this.wobble(0.35*(this.scene.tick - this.hit_when + 2)) + this.last_rot[0], 0, 0, 0));
         }
     }
 }
@@ -1010,11 +1077,14 @@ class Menu {
             case "gameover" : {
                 mat = this.scene.materials.gameover_menu;
             }   break;
+            case "gameoverchild" : {
+                mat = this.scene.materials.gameoverchild_menu;
+            }   break;
             default : {
                 mat = this.scene.materials.menu;
             }
         }
-        this.scene.shapes.menu.draw(context, program_state, Mat4.inverse(program_state.camera_inverse).times(Mat4.translation(0, 0, -3).times(Mat4.scale(1, 1, 1))), mat)
+        this.scene.shapes.menu.draw(context, program_state, Mat4.inverse(program_state.camera_inverse).times(Mat4.translation(0, 0, -3.5).times(Mat4.scale(1, 1, 1))), mat)
     }
 }
 
