@@ -808,7 +808,7 @@ class Arrow extends PhysicsObject {
         super.step(program_state, kobjs);
 
         if(this.position[0] > -1 && this.position[0] < 1
-            && this.position[1] < 2 && this.position[1] > 0.0
+            && this.position[1] > -2 && this.position[1] < 2
             && this.position[2] > -10 && this.position[2] < -7) {
             this.scene.game_childArrow(this);
         }
@@ -831,6 +831,7 @@ class Arrow extends PhysicsObject {
             this.hit_wall = true; 
             this.hit_when = this.scene.tick; 
             this.last_rot = this.rotation; 
+            console.log(this.position)
         }
         if(this.hit_apple || this.position[2] <= -9) {
             //this.position = this.hit_apple.position;
