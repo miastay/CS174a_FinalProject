@@ -67,6 +67,7 @@ export class Project extends Scene {
             menu: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/pausemenu.png")}),
             start_menu: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/startmenu.png")}),
             pause_menu: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/pausemenu.png")}),
+            gameover_menu: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/gameover.png")}),
 
             arrow_dark: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: color(0.26, 0.15, 0.15, 1)}),
             arrowhead: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: hex_color("#9fa4ab")}),
@@ -150,6 +151,7 @@ export class Project extends Scene {
         this.crosshair = new Crosshair(this);
         this.pause = new Menu(this, "pause");
         this.startm = new Menu(this, "start");
+        this.gameoverm = new Menu(this, "gameover");
 
         this.camera_to = this.initial_camera_location;
     }
@@ -258,6 +260,7 @@ export class Project extends Scene {
 
         //run the below regardless of state:
         //program_state.set_camera(this.initial_camera_location);
+        console.log(this.state);
         this.cam_lerp = this.lerp(this.cam_lerp, this.cam_lerp_to, 0.05);
         program_state.camera_inverse = this.camera_to.map((x,i) => Vector.from(program_state.camera_inverse[i]).mix(x, this.cam_lerp));
         program_state.projection_transform = Mat4.perspective(this.fov_default * this.fov_mult, context.width / context.height, .1, 1000);
@@ -292,7 +295,7 @@ export class Project extends Scene {
             }   break;
 
             case this.States.gameOver : {
-
+                this.runGameOver(context, program_state);
             }   break;
 
             case this.States.gameOverChild : {
@@ -315,6 +318,18 @@ export class Project extends Scene {
         this.camera_to = Mat4.look_at(this.initial_eye, vec3(-10, 0, 0), vec3(0, 1, 0));
         if(clicked != null) {
             clicked = null;
+            this.paused = false;
+            this.temp_cooldown = 300;
+            this.state = this.States.game;
+            return;
+        }
+    }
+    runGameOver(context, program_state) {
+        this.gameoverm.draw(context, program_state, this.canvas);
+        this.camera_to = Mat4.look_at(this.initial_eye, vec3(10, 0, 0), vec3(0, 1, 0));
+        if(clicked != null) {
+            clicked = null;
+            this.reset();
             this.paused = false;
             this.temp_cooldown = 300;
             this.state = this.States.game;
