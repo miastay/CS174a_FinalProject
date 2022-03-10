@@ -17,6 +17,9 @@ export class Project extends Scene {
         // constructor(): Scenes begin by populating initial values like the Shapes and Materials they'll need.
         super();
 
+        this.widget_options = {show_canvas: true, make_controls: false, show_explanation: true,
+            make_editor: false, make_code_nav: false};
+
         // At the beginning of our program, load one of each of these shape definitions onto the GPU.
         this.shapes = {
             torus: new defs.Torus(40, 40),
@@ -49,7 +52,7 @@ export class Project extends Scene {
             test4: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 1, color: color(0.5, 0.5, 0.5, 1)}),
 
             light_gadget: new Material(new defs.Phong_Shader(), {ambient: 1, diffusivity: 1, color: color(1, 1, 1, 1)}),
-            floor: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.8, specularity: 0.2, smoothness: 0, color: color(0.6, 0.1, 0.1, 1)}),
+            floor: new Material(new defs.Textured_Phong(), {ambient: .7, diffusivity: 1, color: color(0.1, 0.1, 0.2, 1), texture: new Texture("assets/concrete.png")}),
 
             stem: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: hex_color("#693423")}),
             leaf: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: hex_color("#2cb733")}),
@@ -119,6 +122,7 @@ export class Project extends Scene {
         this.gameoverm = new Menu(this, "gameover");
         this.gameoverchildm = new Menu(this, "gameoverchild");
 
+        this.main_light = new Light(vec4(0, 8, 0, 1), hex_color('#ffffff'), 10**3);
         this.reset();
 
     }
@@ -168,32 +172,6 @@ export class Project extends Scene {
         this.physics_objects = [];
     }
     make_control_panel() {
-        // Draw the scene's buttons, setup their actions and keyboard shortcuts, and monitor live measurements.
-        this.key_triggered_button("make objs jump", ["Control", "0"], function() {
-            for(var obj of this.physics_objects) {
-                obj.add_impulse(vec3(Math.random()*1, Math.random()*12, Math.random()*1));
-                obj.angular_velocity = vec4(Math.random()*10, Math.random()*10, Math.random()*10, 0);
-            }
-        });
-        this.new_line();
-        this.key_triggered_button("spawn apple", ["Control", "1"], function() {
-            this.physics_objects.push(new Apple(vec3(this.mro(4),Math.random()*4,this.mro(4)), vec3(this.mro(1),(Math.random()*1) + 4,this.mro(1)), this))
-        });
-        this.new_line();
-        this.key_triggered_button("pause/play", ["p"], function() {
-            this.paused = !this.paused;
-        });
-        this.new_line();
-        this.key_triggered_button("half speed", ["h"], function() {
-            this.speed = this.speed / 2.0;
-        });
-        this.key_triggered_button("double speed", ["d"], function() {
-            this.speed = this.speed * 2.0;
-        });
-        this.key_triggered_button("scope", ["s"], function() {
-            
-        });
-        this.new_line();
     }
 
     mro(scale) {
@@ -283,8 +261,8 @@ export class Project extends Scene {
         this.cam_lerp = this.lerp(this.cam_lerp, this.cam_lerp_to, 0.05);
         program_state.camera_inverse = this.camera_to.map((x,i) => Vector.from(program_state.camera_inverse[i]).mix(x, this.cam_lerp));
         program_state.projection_transform = Mat4.perspective(this.fov_default * this.fov_mult, context.width / context.height, .1, 1000);
-        const light_position = vec4(0, 8, 0, 1);
-        program_state.lights = [new Light(light_position, hex_color('#ffffff'), 10**3)];
+        program_state.lights = [];
+        program_state.lights.push(this.main_light);
 
         if(document.querySelector("canvas") != null) { 
             this.canvas = document.querySelector("canvas");
@@ -329,6 +307,13 @@ export class Project extends Scene {
         this.draw_light_gadgets(context, program_state);
         this.draw_environment(context, program_state);
 
+    }
+    show_explanation(document_element) {
+        document_element.innerHTML = `<p>Oh no! Your child has fallen over while playing in the kitchen and bumped into the wall, causing your infinite stock of apples to fall from the barrels above. Use your world-class archery skills to stop the apples, score points, and save your child!</p>
+        <p><u>Click and hold</u> to draw back your bow. Aim with your mouse, and <u>release</u> to fire.</p>
+        <p>You earn points for every apple you hit. The closer you are to the center of the apple, the more points you'll earn!</p>
+        <p>Be careful, any apple that hits your child will cause them to lose health. If 5 apples hit them during one level, the game will end!</p>
+        <p>Be on the lookout for special <strong>golden apples</strong>--if you hit one with an arrow, it will slow down the apples and make them easier to hit. You'll also get a big score bonus!</p>`;
     }
 
     runStart(context, program_state) {
@@ -459,7 +444,7 @@ export class Project extends Scene {
                 this.apples_thrown++;
                 this.total_apples_thrown++;
                 if(Math.random()*100 < 9 && this.slow < 0 && this.apples_thrown < (this.level * 1.5)) {
-                    this.physics_objects.push(new GoldenApple(vec3(0, 10, -8.9), vec3(this.mro(3), Math.random()*4, 0), this));
+                    this.physics_objects.push(new GoldenApple(vec3(0, 10, -8.9), vec3(this.mro(3), Math.random()*4, 0), this, program_state));
                 }
                 
             }
@@ -532,19 +517,19 @@ export class Project extends Scene {
         /* floor */
             //this.shapes.box.draw(context, program_state, Mat4.scale(10, 0.5, 10).times(Mat4.translation(0, -4, 0)), this.materials.tex)
         /* z- wall */
-            this.shapes.box.draw(context, program_state, Mat4.scale(10, 8, 1).times(Mat4.translation(0, 0, -10)), this.materials.phong)
+            this.shapes.box.draw(context, program_state, Mat4.scale(16, 8, 1).times(Mat4.translation(0, 0.5, -10)), this.materials.phong)
         /* x+ wall */
-            this.shapes.box.draw(context, program_state, Mat4.scale(1, 8, 10).times(Mat4.translation(10, 0, 0)), this.materials.phong)
+            this.shapes.box.draw(context, program_state, Mat4.scale(1, 8, 16).times(Mat4.translation(10, 0.5, 0)), this.materials.phong)
         /* x- wall */
-            this.shapes.box.draw(context, program_state, Mat4.scale(1, 8, 10).times(Mat4.translation(-10, 0, 0)), this.materials.phong)
+            this.shapes.box.draw(context, program_state, Mat4.scale(1, 8, 16).times(Mat4.translation(-10, 0.5, 0)), this.materials.phong)
         //barrels
             this.shapes.box.draw(context, program_state, Mat4.scale(2, 0.25, 1.25).times(Mat4.translation(2.75, 25, -6)), this.materials.test2)
             this.shapes.barrel.draw(context, program_state, Mat4.scale(2.5, 1.25, 1.25).times(Mat4.translation(2.0, 6, -6)).times(Mat4.rotation(Math.PI/2, 0, 1, 0)), this.materials.barrel);
 
             this.shapes.box.draw(context, program_state, Mat4.scale(2, 0.25, 1.25).times(Mat4.translation(-2.75, 25, -6)), this.materials.test2);
             this.shapes.barrel.draw(context, program_state, Mat4.scale(2.5, 1.25, 1.25).times(Mat4.translation(-2.0, 6, -6)).times(Mat4.rotation(-1 * Math.PI/2, 0, 1, 0)), this.materials.barrel);
-            
-
+        //ceiling
+        this.shapes.box.draw(context, program_state, Mat4.scale(10, 0.5, 10).times(Mat4.translation(0, 21, 0)), this.materials.floor);
             //this.pauseButton.draw(context, program_state);
     }
 
@@ -752,10 +737,11 @@ class Apple extends PhysicsObject {
 }
 
 class GoldenApple extends Apple {
-    constructor(position, initial_velocity, scene) {
+    constructor(position, initial_velocity, scene, program_state) {
         super(position, initial_velocity, scene);
         this.color = color(1, 1, 0, 1);
         this.init_color = this.color;
+        this.light = new Light(this.position, hex_color('#ffffff'), 10**1);
     }
     step(program_state, kobjs) {
         super.step(program_state, kobjs);
@@ -763,6 +749,7 @@ class GoldenApple extends Apple {
             this.kill();
             this.killed = true;
         }
+        this.light.position = this.position;
     }
 }
 
@@ -820,9 +807,9 @@ class Arrow extends PhysicsObject {
     step(program_state, kobjs) {
         super.step(program_state, kobjs);
 
-        if(this.position[0] > -0.75 && this.position[0] < 0.75
-            && this.position[1] < 1.0 && this.position[1] > 0.0
-            && this.position[2] > -8.9 && this.position[2] < -7) {
+        if(this.position[0] > -1 && this.position[0] < 1
+            && this.position[1] < 2 && this.position[1] > 0.0
+            && this.position[2] > -10 && this.position[2] < -7) {
             this.scene.game_childArrow(this);
         }
 
@@ -1178,6 +1165,7 @@ class Confetti extends Particle {
             this.killed = true;
         }
     }
+
 }
 
 
