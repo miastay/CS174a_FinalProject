@@ -69,10 +69,6 @@ export class Project extends Scene {
             arrow_dark: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: color(0.26, 0.15, 0.15, 1)}),
             arrowhead: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: hex_color("#9fa4ab")}),
             feather: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: hex_color("#ffffff")}),
-            barrel: new defs.One_Capped_Cylinder(16,16,[[0,2],[0,1]]),
-            level1: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/Level1.png")}),
-            level2: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/Level2.png")}),
-            level3: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/Level3.png")}),
 
             barrel: new Material(new defs.Fake_Bump_Map(1), {ambient: .5, texture: new Texture("assets/bark_tex.jpg")})
 
@@ -119,7 +115,8 @@ export class Project extends Scene {
         this.state = this.States.game;
         this.level = 1;
         this.apples_thrown = 0;
-        this.lives = 3;
+        this.def_lives = 30;
+        this.lives = this.def_lives;
         this.score = 0;
         this.ticking = true;
         this.paused = false;
@@ -303,14 +300,18 @@ export class Project extends Scene {
         this.draw_physics_objects(context, program_state);
         this.crosshair.draw(context, program_state, this.canvas);
 
+        let scoreboard_transform = Mat4.translation(-2, 0, 0);
+
+        this.shapes.box.draw(context, program_state, scoreboard_transform.times(Mat4.translation(-3.8, 3.5, -9.0).times(Mat4.scale(3.1, 1.5, 0.1))), this.materials.phong.override({color: hex_color("#000000")}));
+
         this.shapes.text.set_string(`Level ${this.level}`, context.context);
-        this.shapes.text.draw(context, program_state, Mat4.identity().times(Mat4.translation(-6, 4.25, -8.7)).times(Mat4.scale(0.4, 0.4, 1)), this.text_image);
+        this.shapes.text.draw(context, program_state, scoreboard_transform.times(Mat4.identity().times(Mat4.translation(-6, 4.25, -8.7)).times(Mat4.scale(0.4, 0.4, 1))), this.text_image);
 
         this.shapes.text.set_string(`Lives: ${this.lives}`, context.context);
-        this.shapes.text.draw(context, program_state, Mat4.identity().times(Mat4.translation(-6, 3.5, -8.7)).times(Mat4.scale(0.4, 0.4, 1)), this.text_image);
+        this.shapes.text.draw(context, program_state, scoreboard_transform.times(Mat4.identity().times(Mat4.translation(-6, 3.5, -8.7)).times(Mat4.scale(0.4, 0.4, 1))), this.text_image.override({color: color(this.lives<3?1:0, this.lives>1?1:0, 0, 1)}));
 
         this.shapes.text.set_string(`Score: ${this.score}`, context.context);
-        this.shapes.text.draw(context, program_state, Mat4.identity().times(Mat4.translation(-6, 2.75, -8.7)).times(Mat4.scale(0.3, 0.3, 1)), this.text_image);
+        this.shapes.text.draw(context, program_state, scoreboard_transform.times(Mat4.identity().times(Mat4.translation(-6, 2.75, -8.7)).times(Mat4.scale(0.3, 0.3, 1))), this.text_image.override({color: color(0.2, 1, 1, 1)}));
 
         this.draw_environment(context, program_state);
         };
@@ -331,7 +332,7 @@ export class Project extends Scene {
                 if(this.apples_thrown > (this.level * 2) + 3) {
                     this.level++;
                     this.apples_thrown = 0;
-                    this.lives = 3;
+                    this.lives = this.def_lives;
                     this.temp_cooldown = 150;
                     this.cooldown = (this.base_cooldown - (this.level * 2));
                     this.level_start = 0;
@@ -977,6 +978,21 @@ class Particle extends PhysicsObject {
         this.material = material;
         this.acceleration = vec3(0, 0, 0);
         this.velocity = vec3(Math.random(), Math.random(), Math.random());
+    }
+    draw(context, program_state) {
+        this.scene.shapes.particle.draw(context, program_state, this.model_transform, this.material);
+    }
+    step(program_state, kobjs) {
+        super.step(program_state, kobjs);
+    }
+}
+class Confetti extends Particle {
+    constructor(position, scale, material, scene) {
+        super(position, scale, material, scene);
+        this.rotation = vec4(1, 0, 0, 1);
+        this.angular_velocity = vec4(Math.random()*10, Math.random()*10, Math.random()*10, Math.random()*10);
+        this.velocity = vec3(Math.random(), Math.random(), Math.random());
+        this.material = new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/confetti.png")})
     }
     draw(context, program_state) {
         this.scene.shapes.particle.draw(context, program_state, this.model_transform, this.material);
