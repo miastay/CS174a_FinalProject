@@ -199,7 +199,6 @@ export class Project extends Scene {
         this.accuracy = (this.total_apples_thrown == 0 ? 1 : this.apples_hit) / (this.total_apples_thrown == 0 ? 1 : this.total_apples_thrown);
         //minimum accuracy is 0, maximum is 1
         //max of dist_sum is apples_hit * 0.5, min is 0
-        console.log(this.dist_sum)
         this.true_accuracy = 1 - ((this.dist_sum)/(this.apples_hit * 0.5));
     }
 
@@ -313,7 +312,8 @@ export class Project extends Scene {
         <p><u>Click and hold</u> to draw back your bow. Aim with your mouse, and <u>release</u> to fire.</p>
         <p>You earn points for every apple you hit. The closer you are to the center of the apple, the more points you'll earn!</p>
         <p>Be careful, any apple that hits your child will cause them to lose health. If 5 apples hit them during one level, the game will end!</p>
-        <p>Be on the lookout for special <strong>golden apples</strong>--if you hit one with an arrow, it will slow down the apples and make them easier to hit. You'll also get a big score bonus!</p>`;
+        <p>Be on the lookout for special <strong>golden apples</strong>--if you hit one with an arrow, it will slow down the apples and make them easier to hit. You'll also get a big score bonus!</p>
+        <p>Press <strong>p</strong> to pause.</p>`;
     }
 
     runStart(context, program_state) {
@@ -414,6 +414,16 @@ export class Project extends Scene {
         if(this.lives == 0) {
             this.state = this.States.gameOver;
         }
+        document.body.onkeyup = function(event) {
+            if(event.key.toLowerCase() == "p") {
+                isR = true;
+            }
+        }
+        if(isR) {
+            this.paused = !this.paused;
+            isR = false;
+            return;
+        }
 
         if(!this.paused) {
             this.level_start = Math.round(this.level_start_float);
@@ -486,19 +496,6 @@ export class Project extends Scene {
             if(this.tick%10 == 0) this.fps = Math.round(100000 / program_state.animation_delta_time) / 100;
         } else {
             this.fov_mult = 1.0;
-            document.body.onkeyup = function(event) {
-                if(event.key.toLowerCase() == "r") {
-                    isR = true;
-                }
-            }
-            if(isR) {
-                this.reset();
-                this.paused = false;
-                this.temp_cooldown = 300;
-                this.state = this.States.game;
-                document.body.onkeyup = null;
-                return;
-            }
         }
     }
 
@@ -831,7 +828,6 @@ class Arrow extends PhysicsObject {
             this.hit_wall = true; 
             this.hit_when = this.scene.tick; 
             this.last_rot = this.rotation; 
-            console.log(this.position)
         }
         if(this.hit_apple || this.position[2] <= -9) {
             //this.position = this.hit_apple.position;
@@ -1051,13 +1047,17 @@ class Crosshair {
 class Menu {
     constructor(scene, type) { 
         this.scene = scene;
-        this.type = type; 
+        this.type = type;
+        this.scale = vec3(1, 1, 1);
+        this.offset = vec3(0, 0, 0);
     }
     draw(context, program_state, canvas) {
         let mat = this.scene.materials.menu;
         switch(this.type) {
             case "start" : {
                 mat = this.scene.materials.start_menu;
+                this.scale = vec3(1.4, 1.4, 1);
+                this.offset = vec3(0, 0.15, 0);
             }   break;
             case "pause" : {
                 mat = this.scene.materials.pause_menu;
@@ -1072,7 +1072,7 @@ class Menu {
                 mat = this.scene.materials.menu;
             }
         }
-        this.scene.shapes.menu.draw(context, program_state, Mat4.inverse(program_state.camera_inverse).times(Mat4.translation(0, 0, -3.5).times(Mat4.scale(1, 1, 1))), mat)
+        this.scene.shapes.menu.draw(context, program_state, Mat4.inverse(program_state.camera_inverse).times(Mat4.translation(0+this.offset[0], 0+this.offset[1], -3.5+this.offset[2]).times(Mat4.scale(1*this.scale[0], 1*this.scale[1], 1*this.scale[2]))), mat)
     }
 }
 

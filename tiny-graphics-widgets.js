@@ -21,8 +21,8 @@ const Canvas_Widget = widgets.Canvas_Widget =
             this.element = element;
 
             const defaults = {
-                show_canvas: true, make_controls: false, show_explanation: true,
-                make_editor: false, make_code_nav: false
+                show_canvas: true, make_controls: true, show_explanation: true,
+                make_editor: false, make_code_nav: true
             };
             if (initial_scenes && initial_scenes[0])
                 Object.assign(options, initial_scenes[0].widget_options);
@@ -35,15 +35,12 @@ const Canvas_Widget = widgets.Canvas_Widget =
             for (const r of rules) document.styleSheets[document.styleSheets.length - 1].insertRule(r, 0)
 
             // Fill in the document elements:
-            
-
-            const canvas = document.createElement("canvas");
             if (this.show_explanation) {
-                this.embedded_explanation_area = document.createElement("div");
+                this.embedded_explanation_area = this.element.appendChild(document.createElement("div"));
                 this.embedded_explanation_area.className = "text-widget";
             }
-            this.element.appendChild(canvas);
-            this.element.appendChild(this.embedded_explanation_area);
+
+            const canvas = this.element.appendChild(document.createElement("canvas"));
 
             if (this.make_controls) {
                 this.embedded_controls_area = this.element.appendChild(document.createElement("div"));
