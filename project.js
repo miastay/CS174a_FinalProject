@@ -61,9 +61,11 @@ export class Project extends Scene {
             face: new Material(new defs.Fake_Bump_Map(1), {ambient: .5, texture: new Texture("assets/face.gif")}),
 
             crosshair: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/crosshair.png")}),
+            apple_kill: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/apple_kill.png")}),
 
 
-            menu: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/menu.png")}),
+            menu: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/pausemenu.png")}),
+            start_menu: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/startmenu.png")}),
             pause_menu: new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/pausemenu.png")}),
 
             arrow_dark: new Material(new defs.Phong_Shader(), {ambient: this.base_ambient, diffusivity: 0.6, color: color(0.26, 0.15, 0.15, 1)}),
@@ -91,10 +93,6 @@ export class Project extends Scene {
         this.child = new ChildModel(vec3(0, 0, 0), this);
 
         this.physics_objects = [
-            new Apple(vec3(0, 5, -3), vec3(0, 1, 0), this),
-            new Apple(vec3(0, 5, -3), vec3(0, 0, 1), this),
-            new Apple(vec3(0, 5, -3), vec3(1, 0, 1), this),
-            new Apple(vec3(0, 5, -3), vec3(-1, 0, 0.5), this)
         ]
         this.kinematic_objects = [
             new Floor(vec3(0, -0.5, 0), this, 0.75, 0.97),
@@ -105,29 +103,38 @@ export class Project extends Scene {
         this.pauseButton = new Button3D(vec3(0, 0, 0), this);
 
         this.States = {
-            'animation' : 0,
+            'start' : 0,
             'game' : 1,
             'gameOver' : 2,
             'gameOverChild' : 3,
             'none': null
         }
+        this.reset();
 
-        this.state = this.States.game;
+    }
+    reset() {
+        this.state = this.States.start;
         this.level = 1;
         this.apples_thrown = 0;
-        this.def_lives = 30;
+        this.def_lives = 5;
         this.lives = this.def_lives;
         this.score = 0;
         this.ticking = true;
-        this.paused = false;
+        this.paused = true;
         this.speed = 1.0;
+        this.speed_to = 1.0;
         this.fov_default = Math.PI / 4;
         this.fov_mult = 1.0;
         this.fov_to = 1.0;
         this.fov_drawn = 0.7;
+        this.shot_cooldown = 1;
+        this.cam_lerp = 0.05;
+        this.cam_lerp_to = 0.05;
 
         this.tick = 0;
         this.level_start = 1;
+        this.level_start_float = 1;
+        this.fps = 0;
         this.cooldown = 150;
         this.temp_cooldown = 0;
         this.base_cooldown = 150;
@@ -136,13 +143,15 @@ export class Project extends Scene {
         this.play_scope_in = true;
         this.volume = 1.0;
 
+        this.particles = 0;
+
         this.initial_arrow_vel = vec3(0, 0, -25);
 
         this.crosshair = new Crosshair(this);
         this.pause = new Menu(this, "pause");
+        this.startm = new Menu(this, "start");
 
         this.camera_to = this.initial_camera_location;
-
     }
     make_control_panel() {
         // Draw the scene's buttons, setup their actions and keyboard shortcuts, and monitor live measurements.
@@ -176,12 +185,7 @@ export class Project extends Scene {
     mro(scale) {
         return (Math.random()-0.5)*scale;
     }
-
-    clicked(event) {
-        if(this.state == this.States.game) {
-            console.log(event, 'game')
-        }
-    }
+    clicked(event) {}
     game_toggleScope(bool) {
         if(!bool) {
             this.fov_to = 1.0;
@@ -216,7 +220,12 @@ export class Project extends Scene {
         document.querySelector("#hit").currentTime = 0;
         document.querySelector("#hit").play();
 
-        this.physics_objects.push(new Particle(apple.position, vec3(0.5, 0.5, 0.5), this.materials.crosshair, this));
+        this.physics_objects.push(new Particle(apple.position, vec3(0.5, 0.5, 0.5), this.materials.apple_kill, this));
+    }
+    game_goldenAppleHit(arrow, apple) {
+        this.score += 450 + (50*this.level);
+        this.lives = Math.min(5, this.lives+1);
+        this.slow = 900;
     }
     game_childHit(apple) {
         document.querySelector("#hurt").volume = (this.volume * 0.6);
@@ -231,6 +240,15 @@ export class Project extends Scene {
         //this.lives = -1;
         this.state = this.States.gameOverChild;
     }
+    game_spawnConfetti() {
+        if(this.particles > 12) {
+            this.particles = 0;
+            return this.confetti = false;
+        }
+        this.physics_objects.push(new Confetti(vec3(((Math.random()-0.5)*1.75) - 4, 4 + (Math.random()*0.5), -8), vec3(0.25, 0.25, 1), null, this));
+        this.particles++;
+        return;
+    }
 
     dist(vec1, vec2) {
         return Math.sqrt((vec2[0] - vec1[0])**2 + (vec2[1] - vec1[1])**2 + (vec2[2] - vec1[2])**2);
@@ -240,7 +258,8 @@ export class Project extends Scene {
 
         //run the below regardless of state:
         //program_state.set_camera(this.initial_camera_location);
-        program_state.camera_inverse = this.camera_to.map((x,i) => Vector.from(program_state.camera_inverse[i]).mix(x, 0.1));
+        this.cam_lerp = this.lerp(this.cam_lerp, this.cam_lerp_to, 0.05);
+        program_state.camera_inverse = this.camera_to.map((x,i) => Vector.from(program_state.camera_inverse[i]).mix(x, this.cam_lerp));
         program_state.projection_transform = Mat4.perspective(this.fov_default * this.fov_mult, context.width / context.height, .1, 1000);
         const light_position = vec4(0, 8, 0, 1);
         program_state.lights = [new Light(light_position, hex_color('#ffffff'), 10**3)];
@@ -251,11 +270,13 @@ export class Project extends Scene {
 
         switch(this.state) {
 
-            case this.States.animation : {
+            case this.States.start : {
 
                 /**
                  *      Animation display logic goes here
                  */
+                this.cam_lerp_to = 0.01;
+                this.runStart(context, program_state);
 
             }   break;
 
@@ -264,7 +285,7 @@ export class Project extends Scene {
                 /**
                  *      Game display logic goes here
                  */
-
+                this.cam_lerp_to = 0.1;
                 this.ticking && this.tickGame(context, program_state);
                 this.drawGame(context, program_state);
 
@@ -285,7 +306,20 @@ export class Project extends Scene {
         }
 
         this.draw_light_gadgets(context, program_state);
+        this.draw_environment(context, program_state);
 
+    }
+
+    runStart(context, program_state) {
+        this.startm.draw(context, program_state, this.canvas);
+        this.camera_to = Mat4.look_at(this.initial_eye, vec3(-10, 0, 0), vec3(0, 1, 0));
+        if(clicked != null) {
+            clicked = null;
+            this.paused = false;
+            this.temp_cooldown = 300;
+            this.state = this.States.game;
+            return;
+        }
     }
 
     /**
@@ -300,7 +334,7 @@ export class Project extends Scene {
         this.draw_physics_objects(context, program_state);
         this.crosshair.draw(context, program_state, this.canvas);
 
-        let scoreboard_transform = Mat4.translation(-2, 0, 0);
+        let scoreboard_transform = Mat4.translation(-1.8, 0, 0);
 
         this.shapes.box.draw(context, program_state, scoreboard_transform.times(Mat4.translation(-3.8, 3.5, -9.0).times(Mat4.scale(3.1, 1.5, 0.1))), this.materials.phong.override({color: hex_color("#000000")}));
 
@@ -313,7 +347,9 @@ export class Project extends Scene {
         this.shapes.text.set_string(`Score: ${this.score}`, context.context);
         this.shapes.text.draw(context, program_state, scoreboard_transform.times(Mat4.identity().times(Mat4.translation(-6, 2.75, -8.7)).times(Mat4.scale(0.3, 0.3, 1))), this.text_image.override({color: color(0.2, 1, 1, 1)}));
 
-        this.draw_environment(context, program_state);
+        this.shapes.text.set_string(`${this.fps} FPS`, context.context);
+        this.shapes.text.draw(context, program_state, scoreboard_transform.times(Mat4.identity().times(Mat4.translation(-6.55, 2.1, -8.7)).times(Mat4.scale(0.08, 0.08, 1))), this.text_image.override({color: color(0.3, 0.3, 0.3, 0.3)}));
+
         };
     }
     /**
@@ -326,7 +362,10 @@ export class Project extends Scene {
         }
 
         if(!this.paused) {
-
+            this.level_start = Math.round(this.level_start_float);
+            this.tick_particles();
+            if(this.slow > 0) { this.speed_to = 0.4; } else { this.speed_to = 1.0; }
+            this.speed = this.lerp(this.speed, this.speed_to, 0.04);
             if(this.level_start % this.cooldown == 0 && this.temp_cooldown <= 0) {
 
                 if(this.apples_thrown > (this.level * 2) + 3) {
@@ -335,8 +374,11 @@ export class Project extends Scene {
                     this.lives = this.def_lives;
                     this.temp_cooldown = 150;
                     this.cooldown = (this.base_cooldown - (this.level * 2));
-                    this.level_start = 0;
+                    this.level_start_float = 0;
                     this.score += this.level * 100;
+                    this.confetti = true;
+                    this.slow = -1;
+                    this.physics_objects.forEach(x => x.kill())
                     return;
                 }
                 this.cooldown = Math.max(50, this.cooldown - 1);
@@ -346,12 +388,20 @@ export class Project extends Scene {
                 }
                 this.physics_objects.push(new Apple(vec3(-5*(xv / Math.abs(xv)), 7, -8.9), vec3(xv, 3, 0), this));
                 this.apples_thrown++;
+                if(Math.random()*100 < 9 && this.slow < 0 && this.apples_thrown < (this.level * 1.5)) {
+                    this.physics_objects.push(new GoldenApple(vec3(0, 10, -8.9), vec3(this.mro(3), Math.random()*4, 0), this));
+                    this.apples_thrown++;
+                }
                 
             }
-            if(this.temp_cooldown <= 0)
-                this.level_start++;
-            else
+            if(this.temp_cooldown <= 0) {
+                this.level_start_float += this.speed_to;
+            }
+            else {
                 this.temp_cooldown--;
+            }
+            this.shot_cooldown--;
+            this.slow--;
 
             this.tick_physics_objects(program_state);
 
@@ -362,8 +412,9 @@ export class Project extends Scene {
                 this.play_scope_in = false;
             }
             if(mouseup != null) { 
-                if(this.fov_mult < 0.82) {
+                if(this.shot_cooldown <= 0) {
                     this.game_spawnArrow(this.fov_drawn / (this.fov_default * this.fov_mult), program_state, context);
+                    this.shot_cooldown = 35;
                 }
                 this.game_toggleScope(false);
                 mouseup = null;
@@ -377,8 +428,8 @@ export class Project extends Scene {
                 this.camera_to = Mat4.look_at(this.initial_eye, vec3(mid_to_mouse[0] * factor, mid_to_mouse[1] * -1 * factor, 0), vec3(0, 1, 0));
             }
             this.last_mouse = mouse;
-
             this.tick++;
+            if(this.tick%10 == 0) this.fps = Math.round(100000 / program_state.animation_delta_time) / 100;
         } else {
             this.fov_mult = 1.0;
             if(clicked != null) {
@@ -388,6 +439,10 @@ export class Project extends Scene {
                 clicked = null;
             }
         }
+    }
+
+    tick_particles() {
+        if(this.confetti && this.tick%10 == 0) this.game_spawnConfetti();
     }
 
     /**
@@ -414,7 +469,7 @@ export class Project extends Scene {
             this.shapes.barrel.draw(context, program_state, Mat4.scale(2.5, 1.25, 1.25).times(Mat4.translation(-2.0, 6, -6)).times(Mat4.rotation(-1 * Math.PI/2, 0, 1, 0)), this.materials.barrel);
             
 
-            this.pauseButton.draw(context, program_state);
+            //this.pauseButton.draw(context, program_state);
     }
 
     draw_light_gadgets(context, program_state) {
@@ -480,7 +535,14 @@ class PhysicsObject {
         const t = program_state.animation_time;
         const dt = program_state.animation_delta_time;
 
-        const dtm = dt * 0.001 * this.scene.speed;
+        let dtm = 0;
+        if(this.scene.slow > 0 && this.constructor.name == "Arrow") {
+            dtm = dt * 0.001 * 1.0;
+        } else if(this.constructor.name == "GoldenApple") {
+            dtm = dt * 0.001 * 0.5;
+        } else {
+            dtm = dt * 0.001 * this.scene.speed;
+        }
         
         this.velocity = this.velocity.plus(this.acceleration.times(dtm));
         this.position = this.position.plus(this.velocity.times(dtm));
@@ -530,6 +592,7 @@ class PhysicsObject {
         
     }
     draw(context, program_state) {};
+    kill() {};
     add_impulse(vec) {
         this.velocity = this.velocity.plus(vec);
     }
@@ -556,6 +619,7 @@ class Apple extends PhysicsObject {
         this.angular_velocity = vec4(Math.random()*10, Math.random()*10, Math.random()*10, 0);
         this.scale = vec3(0.4, 0.4, 0.4);
         this.color = color(Math.random()*0.5 + 0.5, 0, 0, 1);
+        this.init_color = this.color;
         this.radius = 0.3;
         this.alpha = 0.0;
         this.alpha_to = 0.0;
@@ -573,7 +637,7 @@ class Apple extends PhysicsObject {
             this.angular_velocity = vec4(0, 0, 0, 0);
             this.rotation = this.last_rot.plus(vec4(2*this.wobble(0.1*(this.scene.tick - this.hit_when)) + this.last_rot[0], 0, 0, 0));
         }
-        if(this.is_colliding_k(this.scene.child)) {
+        if(this.is_colliding_k(this.scene.child) && this.constructor.name == "Apple") {
             this.kill();
             this.killed = true;
             this.scene.game_childHit(this);
@@ -581,7 +645,7 @@ class Apple extends PhysicsObject {
     }
 
     draw(context, program_state) {
-        this.color = color(this.color[0], 0, 0, 1);
+        this.color = this.init_color;
         this.color = this.color.plus(vec4(this.alpha, this.alpha, this.alpha, this.alpha));
         let apple_transform = this.model_transform.times(Mat4.rotation(Math.PI, 0, 0, 1));
         this.scene.shapes.apple.draw(context, program_state, apple_transform, this.scene.materials.apple.override({color: this.color}));
@@ -608,6 +672,21 @@ class Apple extends PhysicsObject {
     kill() {
         this.wasHit = true;
         this.alpha_to = 1.0;
+    }
+}
+
+class GoldenApple extends Apple {
+    constructor(position, initial_velocity, scene) {
+        super(position, initial_velocity, scene);
+        this.color = color(1, 1, 0, 1);
+        this.init_color = this.color;
+    }
+    step(program_state, kobjs) {
+        super.step(program_state, kobjs);
+        if(this.is_colliding_k(this.scene.child)) {
+            this.kill();
+            this.killed = true;
+        }
     }
 }
 
@@ -670,14 +749,18 @@ class Arrow extends PhysicsObject {
             this.scene.game_childArrow(this);
         }
 
-        for(var apple of this.scene.physics_objects.filter(x => x.constructor.name === "Apple")) {
+        for(var apple of this.scene.physics_objects.filter(x => x.constructor.name.indexOf("Apple") != -1)) {
             if(this.is_colliding_d(apple) && !apple.wasHit && !this.hit_apple) {
                 apple.add_impulse(this.velocity.times(0.2))
                 apple.angular_velocity = vec4(Math.random()*10 + 10, Math.random()*10 + 10, Math.random()*10 + 10, 0);
                 this.hit_apple = apple;
                 this.last_rot = this.rotation;
                 this.hit_when = this.scene.tick;
-                this.scene.game_appleHit(this, apple);
+                if(apple.constructor.name === "GoldenApple") {
+                    this.scene.game_goldenAppleHit(this, apple);
+                } else {
+                    this.scene.game_appleHit(this, apple);
+                }
             }
         }
         if(this.hit_apple) {
@@ -685,10 +768,6 @@ class Arrow extends PhysicsObject {
             this.velocity = vec3(0, 0, 0);
             this.acceleration = vec3(0, 0, 0);
             this.rotation = this.last_rot.plus(vec4(3*this.wobble(0.2*(this.scene.tick - this.hit_when + 15)) + this.last_rot[0], 0, 0, 0));
-        }
-
-        if(this.is_colliding_k(this.scene.pauseButton)) {
-            console.log(pauseButton);
         }
     }
 }
@@ -907,6 +986,9 @@ class Menu {
     draw(context, program_state, canvas) {
         let mat = this.scene.materials.menu;
         switch(this.type) {
+            case "start" : {
+                mat = this.scene.materials.start_menu;
+            }   break;
             case "pause" : {
                 mat = this.scene.materials.pause_menu;
             }   break;
@@ -969,6 +1051,7 @@ class Particle extends PhysicsObject {
         this.rotation = vec4(1, 0, 0, 1);
         this.angular_velocity = vec4(Math.random()*10, Math.random()*10, Math.random()*10, 0);
         this.scale = scale;
+        this.init_scale = scale;
         this.radius = 0.0;
         this.alpha = 0.0;
         this.alpha_to = 0.0;
@@ -978,12 +1061,16 @@ class Particle extends PhysicsObject {
         this.material = material;
         this.acceleration = vec3(0, 0, 0);
         this.velocity = vec3(Math.random(), Math.random(), Math.random());
+        this.scalar = 1.0;
+        this.scalar_to = 0.0;
     }
     draw(context, program_state) {
         this.scene.shapes.particle.draw(context, program_state, this.model_transform, this.material);
     }
     step(program_state, kobjs) {
         super.step(program_state, kobjs);
+        this.scale = this.init_scale.times(this.scalar);
+        this.scalar = this.scene.lerp(this.scalar, this.scalar_to, (0.0001*((this.scene.tick - this.born)**1.1)));
     }
 }
 class Confetti extends Particle {
@@ -991,14 +1078,20 @@ class Confetti extends Particle {
         super(position, scale, material, scene);
         this.rotation = vec4(1, 0, 0, 1);
         this.angular_velocity = vec4(Math.random()*10, Math.random()*10, Math.random()*10, Math.random()*10);
-        this.velocity = vec3(Math.random(), Math.random(), Math.random());
-        this.material = new Material(new defs.Textured_Phong(), {ambient: 1, texture: new Texture("assets/confetti.png")})
+        this.velocity = vec3(this.scene.mro(3), 3, this.scene.mro(3));
+        this.material = new Material(new defs.Textured_Phong(), {ambient: 1, diffusivity: 0.1, specularity: 0.1, texture: new Texture("assets/confetti.png")});
+        this.lifetime = 300;
+        let r = Math.round(Math.random()*2);
+        this.rcolor = color(r==0?1:0, r==1?1:0, r==2?1:0, 1);
     }
     draw(context, program_state) {
-        this.scene.shapes.particle.draw(context, program_state, this.model_transform, this.material);
+        this.scene.shapes.particle.draw(context, program_state, this.model_transform, this.material.override({color: this.rcolor}));
     }
     step(program_state, kobjs) {
         super.step(program_state, kobjs);
+        if(this.scene.tick - this.born > this.lifetime) {
+            this.killed = true;
+        }
     }
 }
 
