@@ -420,12 +420,23 @@ export class Project extends Scene {
         }
         document.body.onkeyup = function(event) {
             if(event.key.toLowerCase() == "p") {
-                isR = true;
+                isR = "p";
+            }
+            if(event.key.toLowerCase() == "r") {
+                isR = "r";
             }
         }
-        if(isR) {
+        if(isR == "p") {
             this.paused = !this.paused;
-            isR = false;
+            isR = "";
+            return;
+        }
+        if(isR == "r") {
+            this.reset();
+            this.paused = false;
+            this.temp_cooldown = 300;
+            this.state = this.States.game;
+            document.body.onkeyup = null;
             return;
         }
 
