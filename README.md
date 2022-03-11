@@ -10,7 +10,8 @@ To run, clone the repo and execute the batch script in your command line:
 Then navigate to port 8000 on localhost to view & interact with the project.
 
 
-Instructions on how to run and play the game:
+#### Instructions on how to run and play the game: ####
+
 The code should run normally without any further adjustments. A start screen with gamplay instructions at the bottom should load first. Click anywhere to start the game.
 
 Click and hold to draw back your bow. Aim with your mouse, and release to fire.
